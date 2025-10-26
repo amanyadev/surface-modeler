@@ -7,12 +7,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/half-edge.git",
+    "url": "https://github.com/amanyadev/surface-modeler.git",
     "directory": "packages/kernel"
   },
-  "homepage": "https://github.com/yourusername/half-edge#readme",
+  "homepage": "https://github.com/amanyadev/surface-modeler/tree/main/packages/kernel#readme",
   "bugs": {
-    "url": "https://github.com/yourusername/half-edge/issues"
+    "url": "https://github.com/amanyadev/surface-modeler/issues"
   },
   "type": "module",
   "main": "./dist/index.js",
