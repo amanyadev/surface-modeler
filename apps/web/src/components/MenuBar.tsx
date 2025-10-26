@@ -1,0 +1,140 @@
+import React, { useState } from 'react';
+import { useAppStore } from '../store';
+import {
+  createPlane,
+  createCube,
+  createCylinder,
+  HalfEdgeMesh
+} from '@half-edge/kernel';
+
+export const MenuBar: React.FC = () => {
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const { setMesh, undo, redo, commandHistory, clearSketch } = useAppStore();
+
+  const menus = [
+    {
+      label: 'File',
+      items: [
+        { label: 'New', action: () => setMesh(createPlane(2, 2) as HalfEdgeMesh), shortcut: '⌘N' },
+        { label: 'Open...', action: () => console.log('Open'), shortcut: '⌘O' },
+        { label: 'Save', action: () => console.log('Save'), shortcut: '⌘S' },
+        { label: 'Save As...', action: () => console.log('Save As'), shortcut: '⇧⌘S' },
+        { label: 'Export...', action: () => console.log('Export'), shortcut: '⌘E' },
+        { label: 'Import...', action: () => console.log('Import'), shortcut: '⌘I' },
+      ]
+    },
+    {
+      label: 'Edit',
+      items: [
+        { label: 'Undo', action: undo, disabled: !commandHistory.canUndo(), shortcut: '⌘Z' },
+        { label: 'Redo', action: redo, disabled: !commandHistory.canRedo(), shortcut: '⇧⌘Z' },
+        { label: 'Clear Sketch', action: clearSketch, shortcut: '⌘K' },
+        { label: 'Select All', action: () => console.log('Select All'), shortcut: '⌘A' },
+        { label: 'Deselect All', action: () => console.log('Deselect All'), shortcut: '⌘D' },
+      ]
+    },
+    {
+      label: 'Create',
+      items: [
+        { label: 'Plane', action: () => setMesh(createPlane(2, 2) as HalfEdgeMesh) },
+        { label: 'Cube', action: () => setMesh(createCube(2) as HalfEdgeMesh) },
+        { label: 'Cylinder', action: () => setMesh(createCylinder(1, 2, 8) as HalfEdgeMesh) },
+        { label: 'Sphere', action: () => console.log('Create Sphere') },
+        { label: 'Torus', action: () => console.log('Create Torus') },
+      ]
+    },
+    {
+      label: 'View',
+      items: [
+        { label: 'Front View', action: () => window.dispatchEvent(new CustomEvent('presetCamera', { detail: 'front' })), shortcut: '1' },
+        { label: 'Back View', action: () => window.dispatchEvent(new CustomEvent('presetCamera', { detail: 'back' })), shortcut: '⌃1' },
+        { label: 'Left View', action: () => window.dispatchEvent(new CustomEvent('presetCamera', { detail: 'left' })), shortcut: '3' },
+        { label: 'Right View', action: () => window.dispatchEvent(new CustomEvent('presetCamera', { detail: 'right' })), shortcut: '⌃3' },
+        { label: 'Top View', action: () => window.dispatchEvent(new CustomEvent('presetCamera', { detail: 'top' })), shortcut: '7' },
+        { label: 'Bottom View', action: () => window.dispatchEvent(new CustomEvent('presetCamera', { detail: 'bottom' })), shortcut: '⌃7' },
+        { label: 'Isometric', action: () => window.dispatchEvent(new CustomEvent('presetCamera', { detail: 'iso' })), shortcut: '0' },
+        { label: 'Reset View', action: () => window.dispatchEvent(new CustomEvent('resetCamera')), shortcut: 'R' },
+        { label: 'Fit All', action: () => window.dispatchEvent(new CustomEvent('fitCamera')), shortcut: 'F' },
+        { label: 'Toggle Wireframe', action: () => window.dispatchEvent(new CustomEvent('toggleWireframe')), shortcut: 'W' },
+      ]
+    },
+    {
+      label: 'Tools',
+      items: [
+        { label: 'Vertex Tool', action: () => console.log('Vertex Tool'), shortcut: '⌘1' },
+        { label: 'Edge Tool', action: () => console.log('Edge Tool'), shortcut: '⌘2' },
+        { label: 'Face Tool', action: () => console.log('Face Tool'), shortcut: '⌘3' },
+        { label: 'Mesh Tool', action: () => console.log('Mesh Tool'), shortcut: '⌘4' },
+      ]
+    },
+    {
+      label: 'Help',
+      items: [
+        { label: 'Keyboard Shortcuts', action: () => console.log('Shortcuts'), shortcut: '⌘?' },
+        { label: 'Documentation', action: () => console.log('Docs') },
+        { label: 'About', action: () => console.log('About') },
+      ]
+    }
+  ];
+
+  const handleMenuClick = (menuLabel: string) => {
+    setOpenMenu(openMenu === menuLabel ? null : menuLabel);
+  };
+
+  const handleItemClick = (action: () => void) => {
+    action();
+    setOpenMenu(null);
+  };
+
+  return (
+    <div className="bg-gray-800 border-b border-gray-700 h-8 flex items-center px-4 text-sm relative z-50">
+      {menus.map((menu) => (
+        <div key={menu.label} className="relative">
+          <button
+            onClick={() => handleMenuClick(menu.label)}
+            className={`px-2 py-1 rounded text-gray-300 hover:bg-gray-700 hover:text-white transition-colors ${
+              openMenu === menu.label ? 'bg-gray-700 text-white' : ''
+            }`}
+          >
+            {menu.label}
+          </button>
+          
+          {openMenu === menu.label && (
+            <>
+              {/* Backdrop to close menu */}
+              <div 
+                className="fixed inset-0 z-10"
+                onClick={() => setOpenMenu(null)}
+              />
+              
+              {/* Dropdown menu */}
+              <div className="absolute left-0 top-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl py-1 min-w-48 z-20">
+                {menu.items.map((item, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleItemClick(item.action)}
+                    disabled={'disabled' in item ? item.disabled : false}
+                    className={`w-full px-3 py-1.5 text-left text-sm flex items-center justify-between hover:bg-gray-700 transition-colors ${
+                      ('disabled' in item && item.disabled) ? 'text-gray-500 cursor-not-allowed' : 'text-gray-300 hover:text-white'
+                    }`}
+                  >
+                    <span>{item.label}</span>
+                    {item.shortcut && (
+                      <span className="text-xs text-gray-500 ml-4">{item.shortcut}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      ))}
+      
+      {/* Right side items */}
+      <div className="ml-auto flex items-center space-x-4">
+        <div className="text-xs text-gray-400">Surface Modeler v0.1.0</div>
+        <div className="w-2 h-2 bg-green-500 rounded-full" title="Online"></div>
+      </div>
+    </div>
+  );
+};

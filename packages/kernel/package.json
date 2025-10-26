@@ -1,0 +1,47 @@
+{
+  "name": "@half-edge/kernel",
+  "version": "0.1.0",
+  "description": "A TypeScript half-edge mesh library for 3D geometry operations and modeling",
+  "keywords": ["3d", "geometry", "mesh", "half-edge", "modeling", "cad", "graphics"],
+  "author": "Aman <your.email@example.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/half-edge.git",
+    "directory": "packages/kernel"
+  },
+  "homepage": "https://github.com/yourusername/half-edge#readme",
+  "bugs": {
+    "url": "https://github.com/yourusername/half-edge/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "lint": "eslint src --ext .ts",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.16",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.2"
+  },
+  "dependencies": {
+    "uuid": "^9.0.1"
+  }
+}
