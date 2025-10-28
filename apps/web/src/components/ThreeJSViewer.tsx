@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { 
   HalfEdgeMesh, 
@@ -11,6 +11,7 @@ import { HalfEdgeVisualization } from './HalfEdgeVisualization';
 // import { SimpleVertexDragger } from './SimpleVertexDragger';
 import { SimpleGeometryDragger } from './SimpleGeometryDragger';
 import { EnhancedGrid } from './EnhancedGrid';
+import { GizmoManager } from './GizmoManager';
 
 interface ThreeJSViewerProps {
   width: number;
@@ -27,6 +28,7 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
   const mouseRef = useRef<THREE.Vector2>();
   const orbitControlsRef = useRef<any>();
   const selectedObjectRef = useRef<THREE.Object3D | null>(null);
+  const gizmoManagerRef = useRef<GizmoManager | null>(null);
   
   
   const { 
@@ -531,6 +533,9 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
         cameraRef.current.position.copy(cameraControls.target).add(offset);
         cameraRef.current.lookAt(cameraControls.target);
         
+        // Update gizmo scales when camera moves
+        updateGizmoScales();
+        
         cameraControls.lastMouse.x = event.clientX;
         cameraControls.lastMouse.y = event.clientY;
         
@@ -551,6 +556,9 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
           
         camera.position.add(panOffset);
         cameraControls.target.add(panOffset);
+        
+        // Update gizmo scales when camera moves
+        updateGizmoScales();
         
         cameraControls.lastMouse.x = event.clientX;
         cameraControls.lastMouse.y = event.clientY;
@@ -591,6 +599,9 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
       // Update spherical coordinates
       const offset = new THREE.Vector3().subVectors(cameraRef.current.position, cameraControls.target);
       cameraControls.spherical.setFromVector3(offset);
+      
+      // Update gizmo scales when camera moves
+      updateGizmoScales();
       
       event.preventDefault();
       console.log('🎮 Zooming camera');
@@ -838,198 +849,15 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
       });
     }
 
-    // Add vertices
-    const vertices = kernelMesh.vertices();
-    vertices.forEach((vertex, index) => {
-      const isSelected = selectedVertexId === vertex.id;
-      const isInSketch = sketchVertices.includes(vertex.id);
-      
-      // Enhanced vertex visualization based on state
-      let geometry, material;
-      
-      if (isSelected) {
-        // Larger, more prominent vertex when selected
-        geometry = new THREE.SphereGeometry(0.15, 16, 12);
-        material = new THREE.MeshStandardMaterial({
-          color: 0xf59e0b, // Amber/orange for selected vertices
-          emissive: 0xd97706,
-          emissiveIntensity: 0.3,
-          roughness: 0.2,
-          metalness: 0.1,
-        });
-      } else if (isInSketch) {
-        geometry = new THREE.SphereGeometry(0.1, 12, 8);
-        material = new THREE.MeshLambertMaterial({
-          color: 0x06b6d4, // Cyan for sketch vertices
-        });
-      } else {
-        geometry = new THREE.SphereGeometry(0.08, 12, 8);
-        material = new THREE.MeshLambertMaterial({
-          color: 0x6b7280, // Better gray color
-        });
-      }
-      
-      const vertexMesh = new THREE.Mesh(geometry, material);
-      vertexMesh.position.set(vertex.pos.x, vertex.pos.y, vertex.pos.z);
-      vertexMesh.userData = { 
-        type: 'vertex', 
-        vertexId: vertex.id, 
-        vertexIndex: index,
-        meshId: kernelMesh.id || 'default-mesh'
-      };
-      vertexMesh.castShadow = true;
-      
-      // selectedObjectRef assignment disabled - using SimpleVertexDragger instead
-      /*
-      if (isSelected) {
-        console.log('🎯 Setting selectedObjectRef to vertex:', vertex.id, vertexMesh);
-        selectedObjectRef.current = vertexMesh;
-      }
-      */
-      
-      // Enhanced visibility logic
-      const shouldShow = selectionMode === 'vertex' || isSelected || drawMode === 'sketch' || drawMode === 'vertex';
-      vertexMesh.visible = shouldShow;
-      
-      // Add highlight ring for better visibility when in vertex mode
-      if (selectionMode === 'vertex' && !isSelected) {
-        const ringGeometry = new THREE.RingGeometry(0.12, 0.15, 16);
-        const ringMaterial = new THREE.MeshBasicMaterial({
-          color: 0x888888,
-          transparent: true,
-          opacity: 0.5,
-          side: THREE.DoubleSide,
-        });
-        const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-        ring.position.copy(vertexMesh.position);
-        if (cameraRef.current) {
-          ring.lookAt(cameraRef.current.position);
-        }
-        ring.userData = vertexMesh.userData;
-        ring.visible = shouldShow;
-        group.add(ring);
-      }
-      
-      group.add(vertexMesh);
-    });
-
-    // Add edges
-    const edges = kernelMesh.edges();
-    edges.forEach((edge, index) => {
-      const halfEdge = kernelMesh.getHalfEdge(edge.halfEdge);
-      if (!halfEdge) return;
-
-      // Get source vertex (previous half-edge's target)
-      const targetVertex = kernelMesh.getVertex(halfEdge.vertex);
-      const prevHalfEdge = halfEdge.prev ? kernelMesh.getHalfEdge(halfEdge.prev) : null;
-      const sourceVertex = prevHalfEdge ? kernelMesh.getVertex(prevHalfEdge.vertex) : null;
-
-      if (targetVertex && sourceVertex) {
-        const geometry = new THREE.BufferGeometry();
-        const positions = new Float32Array([
-          sourceVertex.pos.x, sourceVertex.pos.y, sourceVertex.pos.z,
-          targetVertex.pos.x, targetVertex.pos.y, targetVertex.pos.z,
-        ]);
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        
-        const isSelected = selectedEdgeId === edge.id;
-        
-        // Create edge visualization based on selection state
-        const shouldShowEdges = selectionMode === 'edge';
-        
-        if (shouldShowEdges) {
-          // Only create visible edges when in edge mode
-          if (isSelected) {
-            // Create thick edge for selected
-            const tubeGeometry = new THREE.TubeGeometry(
-              new THREE.LineCurve3(
-                new THREE.Vector3(sourceVertex.pos.x, sourceVertex.pos.y, sourceVertex.pos.z),
-                new THREE.Vector3(targetVertex.pos.x, targetVertex.pos.y, targetVertex.pos.z)
-              ),
-              1,
-              0.02,
-              8,
-              false
-            );
-            const material = new THREE.MeshStandardMaterial({
-              color: 0x10b981, // Emerald green for selected edges
-              emissive: 0x065f46,
-              emissiveIntensity: 0.2,
-              roughness: 0.2,
-              metalness: 0.1,
-            });
-            const edgeMesh = new THREE.Mesh(tubeGeometry, material);
-            edgeMesh.userData = { type: 'edge', edgeId: edge.id, edgeIndex: index };
-            edgeMesh.castShadow = true;
-            edgeMesh.renderOrder = 2; // Render after faces
-            
-            // Store reference if selected
-            selectedObjectRef.current = edgeMesh;
-            group.add(edgeMesh);
-          } else {
-            // Create subtle edge visualization for non-selected edges
-            const tubeGeometry = new THREE.TubeGeometry(
-              new THREE.LineCurve3(
-                new THREE.Vector3(sourceVertex.pos.x, sourceVertex.pos.y, sourceVertex.pos.z),
-                new THREE.Vector3(targetVertex.pos.x, targetVertex.pos.y, targetVertex.pos.z)
-              ),
-              1,
-              0.015, // Thinner for non-selected
-              8,
-              false
-            );
-            
-            const material = new THREE.MeshStandardMaterial({
-              color: 0x64748b, // Slate gray
-              transparent: true,
-              opacity: 0.6,
-              roughness: 0.8,
-              metalness: 0.0,
-            });
-            
-            const edgeMesh = new THREE.Mesh(tubeGeometry, material);
-            edgeMesh.userData = { type: 'edge', edgeId: edge.id, edgeIndex: index };
-            edgeMesh.renderOrder = 2; // Render after faces
-            
-            group.add(edgeMesh);
-          }
-        } else {
-          // When not in edge mode, create invisible selection geometry only
-          const tubeGeometry = new THREE.TubeGeometry(
-            new THREE.LineCurve3(
-              new THREE.Vector3(sourceVertex.pos.x, sourceVertex.pos.y, sourceVertex.pos.z),
-              new THREE.Vector3(targetVertex.pos.x, targetVertex.pos.y, targetVertex.pos.z)
-            ),
-            1,
-            0.04, // Thicker for easier selection
-            8,
-            false
-          );
-          
-          const material = new THREE.MeshStandardMaterial({
-            color: 0x64748b,
-            transparent: true,
-            opacity: 0.0, // Completely invisible
-            roughness: 0.8,
-            metalness: 0.0,
-          });
-          
-          const edgeMesh = new THREE.Mesh(tubeGeometry, material);
-          edgeMesh.userData = { type: 'edge', edgeId: edge.id, edgeIndex: index };
-          edgeMesh.visible = true; // Visible for raycasting but transparent
-          edgeMesh.renderOrder = 2; // Render after faces
-          
-          group.add(edgeMesh);
-        }
-      }
-    });
+    // Note: Vertex and edge gizmos are now handled by GizmoManager
+    // Old vertex and edge processing code removed
     
     return group;
   };
 
   // Update mesh visualization
   useEffect(() => {
-    if (!meshObjectRef.current || !mesh) return;
+    if (!meshObjectRef.current || !mesh || !sceneRef.current || !cameraRef.current) return;
 
     // Clear previous mesh
     meshObjectRef.current.clear();
@@ -1037,11 +865,37 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
     // Add new mesh
     const threeJSMesh = meshToThreeJS(mesh);
     meshObjectRef.current.add(threeJSMesh);
+
+    // Initialize or update gizmo manager
+    if (!gizmoManagerRef.current) {
+      gizmoManagerRef.current = new GizmoManager(sceneRef.current, cameraRef.current, mesh);
+    } else {
+      gizmoManagerRef.current.updateMesh(mesh);
+    }
+
+    // Update gizmo states
+    gizmoManagerRef.current.updateState({
+      selectedVertexId,
+      selectedEdgeId,
+      selectedFaceId: selectedFaceId,
+      hoveredVertexId: null, // Will be updated in mouse handlers
+      hoveredEdgeId: null,
+      hoveredFaceId: null,
+    });
+
+    // Set selection mode for gizmo visibility
+    gizmoManagerRef.current.setSelectionMode(selectionMode);
   }, [mesh, selectedFaceId, selectedFaceIds, selectedVertexId, selectedEdgeId, selectedMeshId, selectionMode, drawMode, sketchVertices, updateCounter, lightingSettings]);
+
+  // Camera change callback for updating gizmo scales
+  const updateGizmoScales = useCallback(() => {
+    if (gizmoManagerRef.current) {
+      gizmoManagerRef.current.updateCameraScale();
+    }
+  }, []);
 
   // Track if we're dragging camera to prevent selection on release
   const isDraggingCameraRef = useRef(false);
-  const hoveredObjectRef = useRef<THREE.Object3D | null>(null);
 
   // Handle mouse clicks for selection
   const handleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1063,9 +917,11 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
 
     raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
     
-    // Only intersect with mesh objects, not gizmos or other UI elements
+    // Intersect with gizmos for selection
+    const gizmoObjects = gizmoManagerRef.current ? gizmoManagerRef.current.getSelectableObjects() : [];
     const meshObjects = meshObjectRef.current ? [meshObjectRef.current] : [];
-    const intersects = raycasterRef.current.intersectObjects(meshObjects, true);
+    const allObjects = [...gizmoObjects, ...meshObjects];
+    const intersects = raycasterRef.current.intersectObjects(allObjects, true);
     
     console.log('🎯 Intersects found:', intersects.length);
     console.log('🎯 All intersects:', intersects.map(i => ({
@@ -1081,9 +937,9 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
       
       // Check if this intersect is valid for current selection mode
       const isValidIntersect = 
-        (selectionMode === 'vertex' && userData.vertexId) ||
-        (selectionMode === 'edge' && userData.edgeId) ||
-        (selectionMode === 'face' && userData.faceId) ||
+        (selectionMode === 'vertex' && (userData.vertexId || userData.type === 'vertex-gizmo')) ||
+        (selectionMode === 'edge' && (userData.edgeId || userData.type === 'edge-gizmo')) ||
+        (selectionMode === 'face' && (userData.faceId || userData.type === 'face-gizmo')) ||
         (selectionMode === 'mesh' && (userData.meshId || mesh));
       
       if (isValidIntersect) {
@@ -1211,33 +1067,41 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
 
     raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
     
-    const meshObjects = meshObjectRef.current ? [meshObjectRef.current] : [];
-    const intersects = raycasterRef.current.intersectObjects(meshObjects, true);
+    // Intersect with gizmos for hover detection
+    const gizmoObjects = gizmoManagerRef.current ? gizmoManagerRef.current.getSelectableObjects() : [];
+    const intersects = raycasterRef.current.intersectObjects(gizmoObjects, true);
     
-    // Reset previous hover state
-    if (hoveredObjectRef.current && hoveredObjectRef.current.userData.originalMaterial) {
-      const obj = hoveredObjectRef.current as THREE.Mesh;
-      if (obj.material && hoveredObjectRef.current.userData.type === 'edge') {
-        (obj.material as THREE.MeshStandardMaterial).opacity = 
-          selectionMode === 'edge' ? 0.8 : 0.0;
-        (obj.material as THREE.MeshStandardMaterial).emissive.setHex(0x000000);
-      }
-    }
-    hoveredObjectRef.current = null;
-    
-    // Find hoverable object
-    for (const intersect of intersects) {
-      const userData = intersect.object.userData;
-      
-      if (selectionMode === 'edge' && userData.type === 'edge' && userData.edgeId) {
-        hoveredObjectRef.current = intersect.object;
-        const obj = intersect.object as THREE.Mesh;
-        if (obj.material) {
-          (obj.material as THREE.MeshStandardMaterial).opacity = 1.0;
-          (obj.material as THREE.MeshStandardMaterial).emissive.setHex(0x444444);
+    // Update hover state in gizmo manager
+    if (gizmoManagerRef.current) {
+      let hoveredVertexId = null;
+      let hoveredEdgeId = null;
+      let hoveredFaceId = null;
+
+      // Find hovered gizmo
+      for (const intersect of intersects) {
+        const userData = intersect.object.userData;
+        
+        if (userData.type === 'vertex-gizmo' && selectionMode === 'vertex') {
+          hoveredVertexId = userData.vertexId;
+          break;
+        } else if (userData.type === 'edge-gizmo' && selectionMode === 'edge') {
+          hoveredEdgeId = userData.edgeId;
+          break;
+        } else if (userData.type === 'face-gizmo' && selectionMode === 'face') {
+          hoveredFaceId = userData.faceId;
+          break;
         }
-        break;
       }
+
+      // Update gizmo manager state with hover information
+      gizmoManagerRef.current.updateState({
+        hoveredVertexId,
+        hoveredEdgeId,
+        hoveredFaceId,
+        selectedVertexId,
+        selectedEdgeId,
+        selectedFaceId,
+      });
     }
   };
 
