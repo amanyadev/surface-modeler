@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAppStore } from '../store';
 import { usePanelManagerContext } from '../App';
 import {
@@ -7,11 +7,73 @@ import {
   createCylinder,
   HalfEdgeMesh
 } from '@half-edge/kernel';
+import { 
+  loadMeshFile, 
+  exportAsOBJ, 
+  exportAsGLTF, 
+  exportAsGLB 
+} from '../utils/meshConversion';
 
 export const MenuBar: React.FC = () => {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const { setMesh, undo, redo, commandHistory, clearSketch } = useAppStore();
+  const { mesh, setMesh, undo, redo, commandHistory, clearSketch } = useAppStore();
   const { showPanel, hidePanel, togglePanel, isPanelVisible, panels } = usePanelManagerContext();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Import/Export handlers
+  const handleFileImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      console.log('📁 Loading file:', file.name);
+      const loadedMesh = await loadMeshFile(file);
+      
+      if (loadedMesh) {
+        setMesh(loadedMesh);
+        console.log('✅ Mesh loaded successfully');
+      } else {
+        console.error('❌ Failed to load mesh from file');
+        alert('Failed to load mesh from file. Please check the file format.');
+      }
+    } catch (error) {
+      console.error('❌ Error loading file:', error);
+      alert(`Error loading file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleExportOBJ = () => {
+    if (!mesh) {
+      alert('No mesh to export');
+      return;
+    }
+    exportAsOBJ(mesh, 'exported_mesh.obj');
+  };
+
+  const handleExportGLTF = () => {
+    if (!mesh) {
+      alert('No mesh to export');
+      return;
+    }
+    exportAsGLTF(mesh, 'exported_mesh.gltf');
+  };
+
+  const handleExportGLB = () => {
+    if (!mesh) {
+      alert('No mesh to export');
+      return;
+    }
+    exportAsGLB(mesh, 'exported_mesh.glb');
+  };
 
   // Categorize panels
   const categorizedPanels = {
@@ -25,11 +87,15 @@ export const MenuBar: React.FC = () => {
       label: 'File',
       items: [
         { label: 'New', action: () => setMesh(createPlane(2, 2) as HalfEdgeMesh), shortcut: '⌘N' },
-        { label: 'Open...', action: () => console.log('Open'), shortcut: '⌘O' },
+        { label: '-' },
+        { label: 'Import...', action: handleImportClick, shortcut: '⌘I' },
+        { label: '-' },
+        { label: 'Export as OBJ', action: handleExportOBJ, disabled: !mesh },
+        { label: 'Export as GLTF', action: handleExportGLTF, disabled: !mesh },
+        { label: 'Export as GLB', action: handleExportGLB, disabled: !mesh },
+        { label: '-' },
         { label: 'Save', action: () => console.log('Save'), shortcut: '⌘S' },
         { label: 'Save As...', action: () => console.log('Save As'), shortcut: '⇧⌘S' },
-        { label: 'Export...', action: () => console.log('Export'), shortcut: '⌘E' },
-        { label: 'Import...', action: () => console.log('Import'), shortcut: '⌘I' },
       ]
     },
     {
@@ -126,6 +192,15 @@ export const MenuBar: React.FC = () => {
 
   return (
     <div className="bg-gray-800 border-b border-gray-700 h-8 flex items-center px-4 text-sm relative z-50">
+      {/* Hidden file input for import */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".obj,.gltf,.glb"
+        onChange={handleFileImport}
+        style={{ display: 'none' }}
+      />
+      
       {menus.map((menu) => (
         <div key={menu.label} className="relative">
           <button

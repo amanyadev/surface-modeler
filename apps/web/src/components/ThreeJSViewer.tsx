@@ -693,6 +693,18 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
         
         // Add vertices and build index mapping
         faceVertices.forEach(vertex => {
+          // Check for valid position coordinates
+          if (!vertex.pos || 
+              typeof vertex.pos.x !== 'number' || 
+              typeof vertex.pos.y !== 'number' || 
+              typeof vertex.pos.z !== 'number' ||
+              !isFinite(vertex.pos.x) || 
+              !isFinite(vertex.pos.y) || 
+              !isFinite(vertex.pos.z)) {
+            console.warn('Invalid vertex position:', vertex.pos, 'for vertex:', vertex.id, 'types:', typeof vertex.pos?.x, typeof vertex.pos?.y, typeof vertex.pos?.z);
+            return; // Skip this vertex
+          }
+          
           const key = `${vertex.pos.x.toFixed(6)}_${vertex.pos.y.toFixed(6)}_${vertex.pos.z.toFixed(6)}`;
           
           if (!vertexMap.has(key)) {
@@ -704,16 +716,21 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
           faceIndices.push(vertexMap.get(key)!);
         });
         
-        // Triangulate face
-        if (faceVertices.length === 4) {
-          // Quad: create two triangles
-          indices.push(faceIndices[0], faceIndices[1], faceIndices[2]);
-          indices.push(faceIndices[0], faceIndices[2], faceIndices[3]);
-        } else {
-          // Fan triangulation for other polygons
-          for (let i = 1; i < faceIndices.length - 1; i++) {
-            indices.push(faceIndices[0], faceIndices[i], faceIndices[i + 1]);
+        // Only create face if we have enough valid vertices
+        if (faceIndices.length >= 3) {
+          // Triangulate face
+          if (faceIndices.length === 4) {
+            // Quad: create two triangles
+            indices.push(faceIndices[0], faceIndices[1], faceIndices[2]);
+            indices.push(faceIndices[0], faceIndices[2], faceIndices[3]);
+          } else {
+            // Fan triangulation for other polygons
+            for (let i = 1; i < faceIndices.length - 1; i++) {
+              indices.push(faceIndices[0], faceIndices[i], faceIndices[i + 1]);
+            }
           }
+        } else {
+          console.warn('Face has insufficient valid vertices:', faceIndices.length, 'for face:', face.id);
         }
       }
     });
