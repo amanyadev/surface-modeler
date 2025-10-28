@@ -7,6 +7,16 @@ export type ControlMode = 'navigate' | 'select' | 'draw';
 export type SelectionMode = 'vertex' | 'edge' | 'face' | 'mesh';
 export type DrawMode = 'none' | 'sketch' | 'vertex' | 'quad' | 'circle';
 
+export interface GridSettings {
+  size: number;
+  divisions: number;
+  showLabels: boolean;
+  showAxes: boolean;
+  adaptive: boolean;
+  opacity: number;
+  visible: boolean;
+}
+
 interface AppState {
   mesh: HalfEdgeMesh | null;
   commandHistory: CommandHistory;
@@ -22,6 +32,7 @@ interface AppState {
   viewMode: ViewMode;
   cameraMode: CameraMode;
   updateCounter: number;
+  gridSettings: GridSettings;
   
   // Actions
   setMesh: (mesh: HalfEdgeMesh) => void;
@@ -43,6 +54,7 @@ interface AppState {
   executeCommand: (command: any) => void;
   undo: () => void;
   redo: () => void;
+  updateGridSettings: (settings: Partial<GridSettings>) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -60,6 +72,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   viewMode: '3d',
   cameraMode: 'perspective',
   updateCounter: 0,
+  gridSettings: {
+    size: 50,
+    divisions: 50,
+    showLabels: true,
+    showAxes: true,
+    adaptive: true,
+    opacity: 0.7,
+    visible: true
+  },
   
   setMesh: (mesh) => set({ mesh }),
   setControlMode: (mode) => set({ 
@@ -114,7 +135,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
   setSelectedVertexId: (vertexId) => set({ selectedVertexId: vertexId, selectedEdgeId: null, selectedFaceId: null, selectedMeshId: null }),
-  setSelectedEdgeId: (edgeId) => set({ selectedEdgeId: edgeId, selectedVertexId: null, selectedFaceId: null, selectedMeshId: null }),
+  setSelectedEdgeId: (edgeId) => {
+    console.log('🔗 Store: Setting selected edge ID:', edgeId);
+    console.log('🔗 Previous selection state:', get().selectedEdgeId);
+    set({ selectedEdgeId: edgeId, selectedVertexId: null, selectedFaceId: null, selectedMeshId: null });
+    console.log('🔗 New selection state:', get().selectedEdgeId);
+  },
   setSelectedFaceId: (faceId) => set({ selectedFaceId: faceId, selectedVertexId: null, selectedEdgeId: null, selectedMeshId: null }),
   setSelectedMeshId: (meshId) => set({ selectedMeshId: meshId, selectedVertexId: null, selectedEdgeId: null, selectedFaceId: null }),
   toggleFaceSelection: (faceId) => {
@@ -164,5 +190,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       // Force re-render by incrementing counter while keeping mesh reference
       set({ updateCounter: updateCounter + 1 });
     }
+  },
+  
+  updateGridSettings: (settings) => {
+    set(state => ({
+      gridSettings: { ...state.gridSettings, ...settings }
+    }));
   },
 }));

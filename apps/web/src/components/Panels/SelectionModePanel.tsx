@@ -17,7 +17,7 @@ export const SelectionModePanel: React.FC = () => {
       name: 'Edge', 
       icon: 'E',
       color: 'bg-blue-600 hover:bg-blue-500',
-      description: 'Select mesh edges'
+      description: 'Select mesh edges (hover to highlight)'
     },
     { 
       key: 'face' as const, 
@@ -75,6 +75,9 @@ export const SelectionModePanel: React.FC = () => {
             <li>• Click to select elements</li>
             <li>• Hold Shift for multi-selection</li>
             <li>• Selected elements show gizmos for movement</li>
+            {selectionMode === 'edge' && (
+              <li className="text-blue-300">• Edges are highlighted on hover</li>
+            )}
           </ul>
         </div>
       </div>

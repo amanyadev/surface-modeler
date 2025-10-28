@@ -26,6 +26,7 @@ export const KeyboardShortcuts: React.FC = () => {
       { keys: 'F', description: 'Fit to screen' },
       { keys: 'W', description: 'Toggle wireframe' },
       { keys: 'SPACE', description: 'Toggle 2D/3D' },
+      { keys: 'H', description: 'Toggle grid' },
     ]},
     { category: 'General', items: [
       { keys: 'Ctrl+Z', description: 'Undo' },

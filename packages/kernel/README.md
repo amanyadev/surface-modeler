@@ -1,4 +1,4 @@
-# @half-edge/kernel
+# @amanyadev/half-edge
 
 A pure TypeScript geometry and modeling kernel for 3D surface modeling applications.
 
@@ -9,7 +9,7 @@ The kernel provides a complete mesh data structure and modeling operations using
 ## Installation
 
 ```bash
-npm install @half-edge/kernel
+npm install @amanyadev16/half-edge
 ```
 
 ## Quick Start

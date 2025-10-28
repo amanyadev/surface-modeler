@@ -9,7 +9,10 @@
   ],
   "scripts": {
     "dev": "pnpm --filter @half-edge/web dev",
+    "dev:all": "pnpm --filter @amanyadev/half-edge dev & pnpm --filter @half-edge/web dev",
+    "dev:kernel": "pnpm --filter @amanyadev/half-edge dev",
     "build": "pnpm -r build",
+    "build:kernel": "pnpm --filter @amanyadev/half-edge build",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
     "type-check": "pnpm -r type-check",

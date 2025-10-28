@@ -35,12 +35,18 @@ export class CommandHistory {
   }
 
   execute(command: Command, target: any): boolean {
+    console.log('🔥 CommandHistory.execute called with command:', command);
+    console.log('🔥 Command type:', command.constructor.name);
+    console.log('🔥 Command name:', command.name);
+    
     if (command.canExecute && !command.canExecute(target)) {
       return false;
     }
 
     try {
+      console.log('🔥 About to call command.do()');
       command.do(target);
+      console.log('🔥 command.do() completed');
       
       // Remove any commands after current index
       this.commands = this.commands.slice(0, this.currentIndex + 1);

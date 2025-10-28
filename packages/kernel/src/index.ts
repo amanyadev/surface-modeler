@@ -45,6 +45,7 @@ export {
   ShellCommand,
   MirrorCommand,
   LinearPatternCommand,
+  SmoothCommand,
 } from './advanced-operations.js';
 
 // Edge Utilities

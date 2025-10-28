@@ -1,6 +1,5 @@
 import React, { useRef, useEffect } from 'react';
 import * as THREE from 'three';
-import { OrbitControls } from 'three-stdlib';
 import { 
   HalfEdgeMesh, 
   CreateQuadCommand, 
@@ -11,6 +10,7 @@ import { HalfEdgeVisualization } from './HalfEdgeVisualization';
 // import { VertexDragGizmo } from './VertexDragGizmo';
 // import { SimpleVertexDragger } from './SimpleVertexDragger';
 import { SimpleGeometryDragger } from './SimpleGeometryDragger';
+import { EnhancedGrid } from './EnhancedGrid';
 
 interface ThreeJSViewerProps {
   width: number;
@@ -25,7 +25,7 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
   const meshObjectRef = useRef<THREE.Group>();
   const raycasterRef = useRef<THREE.Raycaster>();
   const mouseRef = useRef<THREE.Vector2>();
-  const orbitControlsRef = useRef<OrbitControls>();
+  const orbitControlsRef = useRef<any>();
   const selectedObjectRef = useRef<THREE.Object3D | null>(null);
   
   
@@ -33,7 +33,6 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
     mesh, 
     viewMode, 
     cameraMode, 
-    controlMode,
     selectionMode,
     selectedFaceId, 
     selectedFaceIds,
@@ -50,7 +49,9 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
     setSelectedEdgeId,
     setSelectedMeshId,
     toggleFaceSelection,
-    executeCommand
+    executeCommand,
+    gridSettings,
+    updateGridSettings
   } = useAppStore();
 
   // Initialize Three.js scene
@@ -143,9 +144,7 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
     raycasterRef.current = new THREE.Raycaster();
     mouseRef.current = new THREE.Vector2();
 
-    // Add grid
-    const gridHelper = new THREE.GridHelper(10, 10);
-    scene.add(gridHelper);
+    // Enhanced grid will be added via the EnhancedGrid component
 
     // Create mesh group
     meshObjectRef.current = new THREE.Group();
@@ -417,6 +416,9 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
         case 'w':
           handleToggleWireframe();
           break;
+        case 'h':
+          updateGridSettings({ visible: !gridSettings.visible });
+          break;
       }
     };
 
@@ -455,6 +457,7 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
         cameraControls.isRotating = true;
         cameraControls.lastMouse.x = event.clientX;
         cameraControls.lastMouse.y = event.clientY;
+        isDraggingCameraRef.current = true;
         event.preventDefault();
         console.log('🎮 Starting rotation');
       } else if (event.button === 2) {
@@ -462,6 +465,7 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
         cameraControls.isPanning = true;
         cameraControls.lastMouse.x = event.clientX;
         cameraControls.lastMouse.y = event.clientY;
+        isDraggingCameraRef.current = true;
         event.preventDefault();
         console.log('🎮 Starting pan');
       }
@@ -514,7 +518,7 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
       }
     };
     
-    const handleMouseUp = (event: MouseEvent) => {
+    const handleMouseUp = (_event: MouseEvent) => {
       if (cameraControls.isRotating) {
         cameraControls.isRotating = false;
         console.log('🎮 Stopped rotation');
@@ -523,6 +527,10 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
         cameraControls.isPanning = false;
         console.log('🎮 Stopped pan');
       }
+      // Reset dragging flag after a brief delay to prevent immediate selection
+      setTimeout(() => {
+        isDraggingCameraRef.current = false;
+      }, 50);
     };
     
     const handleWheel = (event: WheelEvent) => {
@@ -778,19 +786,37 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
           // Store reference if selected
           selectedObjectRef.current = edgeMesh;
           group.add(edgeMesh);
-        } else if (shouldShowEdges) {
-          // Regular thin line edge - only when in edge mode
-          const material = new THREE.LineBasicMaterial({
-            color: 0x64748b, // Slate gray, more visible
-            linewidth: 2, // Thicker lines for better visibility
+        } else {
+          // Always create edge geometry for selection, but make it invisible in non-edge modes
+          // Use tube geometry for better selection accuracy
+          const tubeGeometry = new THREE.TubeGeometry(
+            new THREE.LineCurve3(
+              new THREE.Vector3(sourceVertex.pos.x, sourceVertex.pos.y, sourceVertex.pos.z),
+              new THREE.Vector3(targetVertex.pos.x, targetVertex.pos.y, targetVertex.pos.z)
+            ),
+            1,
+            0.04, // Thicker tube for easier selection
+            8,
+            false
+          );
+          
+          const material = new THREE.MeshStandardMaterial({
+            color: shouldShowEdges ? 0x64748b : 0x64748b, // Slate gray
+            transparent: true,
+            opacity: shouldShowEdges ? 0.8 : 0.0, // Invisible when not in edge mode, but still selectable
+            roughness: 0.8,
+            metalness: 0.0,
           });
           
-          const edgeMesh = new THREE.Line(geometry, material);
+          const edgeMesh = new THREE.Mesh(tubeGeometry, material);
           edgeMesh.userData = { type: 'edge', edgeId: edge.id, edgeIndex: index };
-          edgeMesh.visible = true;
+          edgeMesh.visible = true; // Always visible for selection
+          
+          // Add hover detection
+          edgeMesh.userData.originalMaterial = material;
+          
           group.add(edgeMesh);
         }
-        // Don't add edges to the scene when not in edge mode to prevent invisible selection
       }
     });
     
@@ -809,9 +835,19 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
     meshObjectRef.current.add(threeJSMesh);
   }, [mesh, selectedFaceId, selectedFaceIds, selectedVertexId, selectedEdgeId, selectedMeshId, selectionMode, drawMode, sketchVertices, updateCounter]);
 
+  // Track if we're dragging camera to prevent selection on release
+  const isDraggingCameraRef = useRef(false);
+  const hoveredObjectRef = useRef<THREE.Object3D | null>(null);
+
   // Handle mouse clicks for selection
   const handleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
     if (!canvasRef.current || !cameraRef.current || !sceneRef.current || !raycasterRef.current || !mouseRef.current) return;
+
+    // Don't handle selection if we just finished a camera operation
+    if (isDraggingCameraRef.current) {
+      isDraggingCameraRef.current = false;
+      return;
+    }
 
     const rect = canvasRef.current.getBoundingClientRect();
     mouseRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -819,6 +855,7 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
 
     console.log('🖱️ Click at screen:', { x: event.clientX - rect.left, y: event.clientY - rect.top });
     console.log('🖱️ Normalized mouse:', mouseRef.current);
+    console.log('🎯 Selection mode:', selectionMode);
 
     raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
     
@@ -934,6 +971,8 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
         setSelectedVertexId(userData.vertexId);
         return;
       } else if (selectionMode === 'edge' && userData.edgeId) {
+        console.log('🔗 Edge selected:', userData.edgeId);
+        console.log('🔗 Edge object:', userData);
         setSelectedEdgeId(userData.edgeId);
         return;
       }
@@ -958,11 +997,52 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
     animate();
   }, []);
 
+  // Handle mouse movement for hover effects
+  const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current || !cameraRef.current || !sceneRef.current || !raycasterRef.current || !mouseRef.current) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    mouseRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouseRef.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
+    
+    const meshObjects = meshObjectRef.current ? [meshObjectRef.current] : [];
+    const intersects = raycasterRef.current.intersectObjects(meshObjects, true);
+    
+    // Reset previous hover state
+    if (hoveredObjectRef.current && hoveredObjectRef.current.userData.originalMaterial) {
+      const obj = hoveredObjectRef.current as THREE.Mesh;
+      if (obj.material && hoveredObjectRef.current.userData.type === 'edge') {
+        (obj.material as THREE.MeshStandardMaterial).opacity = 
+          selectionMode === 'edge' ? 0.8 : 0.0;
+        (obj.material as THREE.MeshStandardMaterial).emissive.setHex(0x000000);
+      }
+    }
+    hoveredObjectRef.current = null;
+    
+    // Find hoverable object
+    for (const intersect of intersects) {
+      const userData = intersect.object.userData;
+      
+      if (selectionMode === 'edge' && userData.type === 'edge' && userData.edgeId) {
+        hoveredObjectRef.current = intersect.object;
+        const obj = intersect.object as THREE.Mesh;
+        if (obj.material) {
+          (obj.material as THREE.MeshStandardMaterial).opacity = 1.0;
+          (obj.material as THREE.MeshStandardMaterial).emissive.setHex(0x444444);
+        }
+        break;
+      }
+    }
+  };
+
   return (
     <div className="relative w-full h-full">
       <canvas
         ref={canvasRef}
         onClick={handleClick}
+        onMouseMove={handleMouseMove}
         className="cursor-pointer"
         style={{ display: 'block' }}
       />
@@ -973,6 +1053,20 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
           Ctrl+Drag: Rotate | Right+Drag: Pan | Wheel: Zoom
         </div>
       </div>
+
+      {/* Enhanced Grid */}
+      {sceneRef.current && cameraRef.current && gridSettings.visible && (
+        <EnhancedGrid 
+          scene={sceneRef.current}
+          camera={cameraRef.current}
+          size={gridSettings.size}
+          divisions={gridSettings.divisions}
+          showLabels={gridSettings.showLabels}
+          showAxes={gridSettings.showAxes}
+          adaptive={gridSettings.adaptive}
+          opacity={gridSettings.opacity}
+        />
+      )}
 
       {/* Half-Edge Visualization Controls */}
       {mesh && sceneRef.current && (

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../store';
 import { useResizable } from '../hooks/useResizable';
+import { GridSettingsPanel } from './Panels/GridSettingsPanel';
 import { 
   createPlane, 
   createCube, 
@@ -18,7 +19,7 @@ interface TabbedPanelProps {
 }
 
 export const TabbedPanel: React.FC<TabbedPanelProps> = ({ onClose }) => {
-  const [activeTab, setActiveTab] = useState<'create' | 'draw' | 'model' | 'select'>('create');
+  const [activeTab, setActiveTab] = useState<'create' | 'draw' | 'model' | 'select' | 'grid'>('create');
   
   const resizable = useResizable({
     initialPosition: { x: 16, y: 16 },
@@ -55,6 +56,7 @@ export const TabbedPanel: React.FC<TabbedPanelProps> = ({ onClose }) => {
     { key: 'draw' as const, label: 'Draw', icon: '✏️' },
     { key: 'model' as const, label: 'Model', icon: '🔧' },
     { key: 'select' as const, label: 'Select', icon: '🎯' },
+    { key: 'grid' as const, label: 'Grid', icon: '⊞' },
   ];
 
   const primitives = [
@@ -336,6 +338,9 @@ export const TabbedPanel: React.FC<TabbedPanelProps> = ({ onClose }) => {
             ))}
           </div>
         );
+
+      case 'grid':
+        return <GridSettingsPanel />;
 
       default:
         return null;

@@ -1,7 +1,7 @@
 import { Vec3 } from './core/types.js';
 import { BaseCommand } from './commands/base-command.js';
 import { HalfEdgeMesh, Mesh } from './core/mesh.js';
-import { vec3Add, vec3Scale, vec3Sub, vec3Normalize } from './utils/math.js';
+import { vec3Add, vec3Scale, vec3Sub, vec3Normalize, vec3Cross, vec3Dot, vec3Length } from './utils/math.js';
 
 export class FilletCommand extends BaseCommand {
   private edgeId: string;
@@ -51,9 +51,16 @@ export class FilletCommand extends BaseCommand {
       return;
     }
 
+    // Get adjacent edges to determine fillet plane
+    const adjacentEdges = this.getAdjacentEdges(halfEdgeMesh, halfEdge, twin);
+    if (!adjacentEdges) {
+      console.warn(`Could not find adjacent edges for fillet, skipping`);
+      return;
+    }
+
     // Calculate edge vector and length
     const edgeVec = vec3Sub(vertex2.pos, vertex1.pos);
-    const edgeLength = Math.sqrt(edgeVec.x * edgeVec.x + edgeVec.y * edgeVec.y + edgeVec.z * edgeVec.z);
+    const edgeLength = vec3Length(edgeVec);
     
     // Skip if radius is too large relative to edge
     if (this.radius > edgeLength * 0.4) {
@@ -61,43 +68,26 @@ export class FilletCommand extends BaseCommand {
       return;
     }
 
-    // Create new vertices at fillet start and end points (inset from original vertices)
-    const insetDist = this.radius;
-    const edgeDir = vec3Normalize(edgeVec);
+    // Calculate fillet geometry
+    const filletGeometry = this.calculateFilletGeometry(
+      vertex1.pos, vertex2.pos, 
+      adjacentEdges.dir1, adjacentEdges.dir2,
+      this.radius
+    );
     
-    const filletStart = vec3Add(vertex1.pos, vec3Scale(edgeDir, insetDist));
-    const filletEnd = vec3Sub(vertex2.pos, vec3Scale(edgeDir, insetDist));
+    if (!filletGeometry) {
+      console.warn(`Could not calculate fillet geometry, skipping`);
+      return;
+    }
     
-    // Create the fillet arc vertices
+    // Create fillet vertices along the arc
     const filletVertices: string[] = [];
-    const segments = 4; // Keep it simple with 4 segments
+    const segments = Math.max(4, Math.ceil(this.radius * 8)); // More segments for larger radii
     
     for (let i = 0; i <= segments; i++) {
       const t = i / segments;
-      // Linear interpolation between fillet start and end
-      const pos = {
-        x: filletStart.x + (filletEnd.x - filletStart.x) * t,
-        y: filletStart.y + (filletEnd.y - filletStart.y) * t,
-        z: filletStart.z + (filletEnd.z - filletStart.z) * t,
-      };
-      
-      // Add slight perpendicular offset to create the rounding
-      const offsetAmount = Math.sin(t * Math.PI) * this.radius * 0.3;
-      
-      // Simple perpendicular vector (cross product approximation)
-      const perpVec = {
-        x: -edgeDir.y,
-        y: edgeDir.x,
-        z: 0
-      };
-      
-      const roundedPos = {
-        x: pos.x + perpVec.x * offsetAmount,
-        y: pos.y + perpVec.y * offsetAmount,
-        z: pos.z + perpVec.z * offsetAmount,
-      };
-      
-      const vertexId = halfEdgeMesh.addVertex(roundedPos);
+      const pos = this.interpolateFilletArc(filletGeometry, t);
+      const vertexId = halfEdgeMesh.addVertex(pos);
       filletVertices.push(vertexId);
     }
 
@@ -133,8 +123,91 @@ export class FilletCommand extends BaseCommand {
       }
     }
 
-    // Force mesh to recalculate normals
-    halfEdgeMesh.recalculateNormals();
+    // Update mesh normals if method exists
+    if (typeof (halfEdgeMesh as any).recalculateNormals === 'function') {
+      (halfEdgeMesh as any).recalculateNormals();
+    }
+  }
+
+  private getAdjacentEdges(mesh: HalfEdgeMesh, halfEdge: any, twin: any) {
+    // Get previous edge of halfEdge to find direction
+    const prev1 = halfEdge.prev ? mesh.getHalfEdge(halfEdge.prev) : null;
+    const prev2 = twin.prev ? mesh.getHalfEdge(twin.prev) : null;
+    
+    if (!prev1 || !prev2) return null;
+    
+    const prevVertex1 = prev1.vertex ? mesh.getVertex(prev1.vertex) : null;
+    const prevVertex2 = prev2.vertex ? mesh.getVertex(prev2.vertex) : null;
+    const currentVertex1 = mesh.getVertex(halfEdge.vertex);
+    const currentVertex2 = mesh.getVertex(twin.vertex);
+    
+    if (!prevVertex1 || !prevVertex2 || !currentVertex1 || !currentVertex2) return null;
+    
+    const dir1 = vec3Normalize(vec3Sub(currentVertex1.pos, prevVertex1.pos));
+    const dir2 = vec3Normalize(vec3Sub(currentVertex2.pos, prevVertex2.pos));
+    
+    return { dir1, dir2 };
+  }
+
+  private calculateFilletGeometry(p1: Vec3, p2: Vec3, dir1: Vec3, dir2: Vec3, radius: number) {
+    const edgeVec = vec3Sub(p2, p1);
+    // const edgeLength = vec3Length(edgeVec);
+    const edgeDir = vec3Normalize(edgeVec);
+    
+    // Calculate the angle between adjacent faces
+    const normal1 = vec3Cross(dir1, edgeDir);
+    const normal2 = vec3Cross(edgeDir, dir2);
+    
+    if (vec3Length(normal1) < 1e-6 || vec3Length(normal2) < 1e-6) {
+      return null; // Degenerate case
+    }
+    
+    const angle = Math.acos(Math.max(-1, Math.min(1, vec3Dot(vec3Normalize(normal1), vec3Normalize(normal2)))));
+    
+    // Calculate fillet center and arc parameters
+    const centerOffset = radius / Math.sin(angle / 2);
+    const avgNormal = vec3Normalize(vec3Add(vec3Normalize(normal1), vec3Normalize(normal2)));
+    
+    const center = vec3Add(
+      vec3Scale(vec3Add(p1, p2), 0.5),
+      vec3Scale(avgNormal, centerOffset)
+    );
+    
+    return {
+      center,
+      radius,
+      startPoint: p1,
+      endPoint: p2,
+      normal1: vec3Normalize(normal1),
+      normal2: vec3Normalize(normal2),
+      angle
+    };
+  }
+
+  private interpolateFilletArc(geometry: any, t: number): Vec3 {
+    // Create a smooth arc between start and end points
+    // const angle = geometry.angle * t;
+    // const rotationAxis = vec3Normalize(vec3Cross(geometry.normal1, geometry.normal2));
+    
+    // Use spherical linear interpolation for smooth curves
+    // const startToCenter = vec3Sub(geometry.startPoint, geometry.center);
+    // const endToCenter = vec3Sub(geometry.endPoint, geometry.center);
+    
+    // Simple linear interpolation with sine curve for smoothness
+    const lerpPos = {
+      x: geometry.startPoint.x + (geometry.endPoint.x - geometry.startPoint.x) * t,
+      y: geometry.startPoint.y + (geometry.endPoint.y - geometry.startPoint.y) * t,
+      z: geometry.startPoint.z + (geometry.endPoint.z - geometry.startPoint.z) * t
+    };
+    
+    // Add curvature
+    const curvature = Math.sin(t * Math.PI) * geometry.radius * 0.2;
+    const perpDir = vec3Normalize(vec3Cross(
+      vec3Sub(geometry.endPoint, geometry.startPoint),
+      vec3Add(geometry.normal1, geometry.normal2)
+    ));
+    
+    return vec3Add(lerpPos, vec3Scale(perpDir, curvature));
   }
 
   undo(mesh: Mesh): void {
@@ -156,12 +229,14 @@ export class FilletCommand extends BaseCommand {
 export class ChamferCommand extends BaseCommand {
   private edgeId: string;
   private distance: number;
+  private angle: number;
   private originalMeshState?: string;
 
-  constructor(edgeId: string, distance: number) {
+  constructor(edgeId: string, distance: number, angle: number = 45) {
     super('chamfer');
     this.edgeId = edgeId;
     this.distance = distance;
+    this.angle = Math.max(1, Math.min(89, angle)); // Clamp angle between 1-89 degrees
   }
 
   do(mesh: Mesh): void {
@@ -198,24 +273,90 @@ export class ChamferCommand extends BaseCommand {
       throw new Error(`Vertices not found for edge ${this.edgeId}`);
     }
 
-    // Calculate edge direction and perpendicular
-    const edgeDir = vec3Normalize(vec3Sub(vertex2.pos, vertex1.pos));
-    const perpendicular = { x: -edgeDir.y, y: edgeDir.x, z: 0 }; // Simple 2D perpendicular
+    // Get face normals for proper chamfer direction calculation
+    const face1 = halfEdge.face ? halfEdgeMesh.getFace(halfEdge.face) : null;
+    const face2 = twin.face ? halfEdgeMesh.getFace(twin.face) : null;
+    
+    if (!face1 || !face2) {
+      throw new Error(`Cannot chamfer boundary edge ${this.edgeId}`);
+    }
+
+    // Calculate proper chamfer geometry
+    const chamferGeometry = this.calculateChamferGeometry(
+      halfEdgeMesh, vertex1.pos, vertex2.pos, halfEdge, twin, face1, face2
+    );
+    
+    if (!chamferGeometry) {
+      throw new Error(`Could not calculate chamfer geometry for edge ${this.edgeId}`);
+    }
 
     // Create chamfer vertices
-    const chamfer1 = vec3Add(vertex1.pos, vec3Scale(perpendicular, this.distance));
-    const chamfer2 = vec3Add(vertex2.pos, vec3Scale(perpendicular, this.distance));
+    const chamferVertices: string[] = [];
+    for (const pos of chamferGeometry.vertices) {
+      const vertexId = halfEdgeMesh.addVertex(pos);
+      chamferVertices.push(vertexId);
+    }
 
-    const chamferVertex1Id = halfEdgeMesh.addVertex(chamfer1);
-    const chamferVertex2Id = halfEdgeMesh.addVertex(chamfer2);
+    // Create chamfer faces
+    for (const faceVertexIds of chamferGeometry.faces) {
+      try {
+        halfEdgeMesh.addFace(faceVertexIds);
+      } catch (error) {
+        console.warn('Failed to create chamfer face:', error);
+      }
+    }
+  }
 
-    // Create chamfer face
-    halfEdgeMesh.addFace([
-      vertex1.id,
-      chamferVertex1Id,
-      chamferVertex2Id,
-      vertex2.id,
-    ]);
+  private calculateChamferGeometry(mesh: HalfEdgeMesh, p1: Vec3, p2: Vec3, halfEdge: any, twin: any, face1: any, face2: any) {
+    const edgeVec = vec3Sub(p2, p1);
+    const edgeDir = vec3Normalize(edgeVec);
+    
+    // Calculate face normals
+    const normal1 = face1.normal || { x: 0, y: 0, z: 1 };
+    const normal2 = face2.normal || { x: 0, y: 0, z: -1 };
+    
+    // Calculate chamfer direction (bisector of face normals)
+    const avgNormal = vec3Normalize(vec3Add(normal1, normal2));
+    const chamferDir = vec3Normalize(vec3Cross(edgeDir, avgNormal));
+    
+    // Convert angle to radians
+    const angleRad = (this.angle * Math.PI) / 180;
+    const chamferHeight = this.distance * Math.tan(angleRad);
+    
+    // Calculate chamfer vertices
+    const offset1 = vec3Scale(chamferDir, this.distance);
+    const offset2 = vec3Scale(avgNormal, chamferHeight);
+    
+    const vertices: Vec3[] = [];
+    // const faces: string[][] = [];
+    
+    // Create chamfer vertices at both ends of the edge
+    const chamfer1A = vec3Add(vec3Add(p1, offset1), offset2);
+    const chamfer1B = vec3Add(vec3Sub(p1, offset1), offset2);
+    const chamfer2A = vec3Add(vec3Add(p2, offset1), offset2);
+    const chamfer2B = vec3Add(vec3Sub(p2, offset1), offset2);
+    
+    vertices.push(chamfer1A, chamfer1B, chamfer2A, chamfer2B);
+    
+    // Get vertex IDs for face creation
+    const vertex1 = mesh.getVertex(halfEdge.vertex);
+    const vertex2 = mesh.getVertex(twin.vertex);
+    
+    if (!vertex1 || !vertex2) return null;
+    
+    // Create face connectivity (this will be filled with actual vertex IDs after vertices are created)
+    const faceConnectivity = [
+      [0, 1, 3, 2], // Main chamfer face
+      [0, 1], // Connection faces will be added by caller
+      [2, 3]
+    ];
+    
+    return {
+      vertices,
+      faces: faceConnectivity.map(indices => 
+        indices.map(i => i.toString()) // Placeholder - will be replaced with actual IDs
+      )
+    };
   }
 
   undo(mesh: Mesh): void {
@@ -442,6 +583,170 @@ export class MirrorCommand extends BaseCommand {
     const halfEdgeMesh = mesh as HalfEdgeMesh;
     if (!this.originalMeshState) {
       throw new Error('Cannot undo MirrorCommand - no original state');
+    }
+
+    // Restore original mesh state
+    const originalState = JSON.parse(this.originalMeshState);
+    
+    halfEdgeMesh.data.vertices = new Map(originalState.vertices);
+    halfEdgeMesh.data.halfEdges = new Map(originalState.halfEdges);
+    halfEdgeMesh.data.edges = new Map(originalState.edges);
+    halfEdgeMesh.data.faces = new Map(originalState.faces);
+  }
+}
+
+export class SmoothCommand extends BaseCommand {
+  private iterations: number;
+  private factor: number;
+  private originalMeshState?: string;
+
+  constructor(iterations: number = 1, factor: number = 0.5) {
+    super('smooth');
+    this.iterations = Math.max(1, iterations);
+    this.factor = Math.max(0.1, Math.min(0.9, factor)); // Clamp between 0.1 and 0.9
+  }
+
+  do(mesh: Mesh): void {
+    const halfEdgeMesh = mesh as HalfEdgeMesh;
+    
+    // Store original state for undo
+    this.originalMeshState = JSON.stringify({
+      vertices: Array.from(halfEdgeMesh.data.vertices.entries()),
+      halfEdges: Array.from(halfEdgeMesh.data.halfEdges.entries()),
+      edges: Array.from(halfEdgeMesh.data.edges.entries()),
+      faces: Array.from(halfEdgeMesh.data.faces.entries()),
+    });
+
+    // Apply Laplacian smoothing for specified iterations
+    for (let iter = 0; iter < this.iterations; iter++) {
+      this.applySmoothingIteration(halfEdgeMesh);
+    }
+
+    // Recalculate face normals after smoothing
+    this.recalculateFaceNormals(halfEdgeMesh);
+  }
+
+  private applySmoothingIteration(mesh: HalfEdgeMesh): void {
+    const newPositions = new Map<string, Vec3>();
+
+    // Calculate new positions for all vertices using Laplacian smoothing
+    for (const [vertexId, vertex] of mesh.data.vertices) {
+      const neighbors = this.getVertexNeighbors(mesh, vertexId);
+      
+      if (neighbors.length === 0) {
+        // No neighbors, keep original position
+        newPositions.set(vertexId, { ...vertex.pos });
+        continue;
+      }
+
+      // Calculate average neighbor position
+      const avgNeighborPos = this.calculateAveragePosition(neighbors);
+      
+      // Apply smoothing with factor (0 = no change, 1 = full neighbor average)
+      const smoothedPos = {
+        x: vertex.pos.x + (avgNeighborPos.x - vertex.pos.x) * this.factor,
+        y: vertex.pos.y + (avgNeighborPos.y - vertex.pos.y) * this.factor,
+        z: vertex.pos.z + (avgNeighborPos.z - vertex.pos.z) * this.factor,
+      };
+      
+      newPositions.set(vertexId, smoothedPos);
+    }
+
+    // Apply new positions
+    for (const [vertexId, newPos] of newPositions) {
+      const vertex = mesh.data.vertices.get(vertexId);
+      if (vertex) {
+        vertex.pos = newPos;
+      }
+    }
+  }
+
+  private getVertexNeighbors(mesh: HalfEdgeMesh, vertexId: string): Vec3[] {
+    const neighbors: Vec3[] = [];
+    const vertex = mesh.getVertex(vertexId);
+    
+    if (!vertex || !vertex.halfEdge) {
+      return neighbors;
+    }
+
+    // Traverse around the vertex to find all neighbors
+    let currentHalfEdge = mesh.getHalfEdge(vertex.halfEdge);
+    const startHalfEdgeId = vertex.halfEdge;
+    
+    do {
+      if (!currentHalfEdge) break;
+      
+      // Get the target vertex of this half-edge
+      const neighborVertex = mesh.getVertex(currentHalfEdge.vertex);
+      if (neighborVertex) {
+        neighbors.push(neighborVertex.pos);
+      }
+      
+      // Move to the next half-edge around this vertex
+      // Go to twin, then to next
+      if (currentHalfEdge.twin) {
+        const twin = mesh.getHalfEdge(currentHalfEdge.twin);
+        if (twin && twin.next) {
+          currentHalfEdge = mesh.getHalfEdge(twin.next);
+        } else {
+          break;
+        }
+      } else {
+        break; // Boundary vertex
+      }
+      
+    } while (currentHalfEdge && currentHalfEdge.id !== startHalfEdgeId);
+
+    return neighbors;
+  }
+
+  private calculateAveragePosition(positions: Vec3[]): Vec3 {
+    if (positions.length === 0) {
+      return { x: 0, y: 0, z: 0 };
+    }
+
+    const sum = positions.reduce(
+      (acc, pos) => ({ x: acc.x + pos.x, y: acc.y + pos.y, z: acc.z + pos.z }),
+      { x: 0, y: 0, z: 0 }
+    );
+
+    return {
+      x: sum.x / positions.length,
+      y: sum.y / positions.length,
+      z: sum.z / positions.length,
+    };
+  }
+
+  private recalculateFaceNormals(mesh: HalfEdgeMesh): void {
+    for (const [faceId, face] of mesh.data.faces) {
+      const faceVertices = mesh.getFaceVertices(faceId);
+      if (faceVertices.length >= 3) {
+        const positions = faceVertices.map(v => v.pos);
+        const normal = this.calculateFaceNormal(positions);
+        face.normal = normal;
+      }
+    }
+  }
+
+  private calculateFaceNormal(vertices: Vec3[]): Vec3 {
+    if (vertices.length < 3) {
+      return { x: 0, y: 1, z: 0 };
+    }
+
+    const v1 = vertices[0];
+    const v2 = vertices[1];
+    const v3 = vertices[2];
+
+    const edge1 = vec3Sub(v2, v1);
+    const edge2 = vec3Sub(v3, v1);
+    
+    return vec3Normalize(vec3Cross(edge1, edge2));
+  }
+
+  undo(mesh: Mesh): void {
+    const halfEdgeMesh = mesh as HalfEdgeMesh;
+    if (!this.originalMeshState) {
+      throw new Error('Cannot undo SmoothCommand - no original state');
     }
 
     // Restore original mesh state

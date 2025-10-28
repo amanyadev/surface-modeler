@@ -1,5 +1,5 @@
 {
-  "name": "@half-edge/kernel",
+  "name": "@amanyadev/half-edge",
   "version": "0.1.0",
   "description": "A TypeScript half-edge mesh library for 3D geometry operations and modeling",
   "keywords": ["3d", "geometry", "mesh", "half-edge", "modeling", "cad", "graphics"],
