@@ -48,7 +48,7 @@ export function createCube(size = 1): Mesh {
   return mesh;
 }
 
-export function createCylinder(radius = 0.5, height = 1, segments = 8): Mesh {
+export function createCylinder(radius = 0.5, height = 1, segments = 16): Mesh {
   const mesh = new HalfEdgeMesh();
   const halfHeight = height / 2;
   
@@ -56,7 +56,7 @@ export function createCylinder(radius = 0.5, height = 1, segments = 8): Mesh {
   const bottomVertices: string[] = [];
   const topVertices: string[] = [];
   
-  // Bottom and top circle vertices
+  // Bottom and top circle vertices with better distribution
   for (let i = 0; i < segments; i++) {
     const angle = (i / segments) * Math.PI * 2;
     const x = Math.cos(angle) * radius;
@@ -73,33 +73,33 @@ export function createCylinder(radius = 0.5, height = 1, segments = 8): Mesh {
   const bottomCenter = mesh.addVertex(vec3(0, -halfHeight, 0));
   const topCenter = mesh.addVertex(vec3(0, halfHeight, 0));
   
-  // Create bottom cap faces
+  // Create bottom cap faces (correct winding)
   for (let i = 0; i < segments; i++) {
     const next = (i + 1) % segments;
-    mesh.addFace([bottomCenter, bottomVertices[next], bottomVertices[i]]);
+    mesh.addFace([bottomCenter, bottomVertices[i], bottomVertices[next]]);
   }
   
-  // Create top cap faces
+  // Create top cap faces (correct winding)
   for (let i = 0; i < segments; i++) {
     const next = (i + 1) % segments;
-    mesh.addFace([topCenter, topVertices[i], topVertices[next]]);
+    mesh.addFace([topCenter, topVertices[next], topVertices[i]]);
   }
   
-  // Create side faces
+  // Create side faces with consistent winding
   for (let i = 0; i < segments; i++) {
     const next = (i + 1) % segments;
     mesh.addFace([
       bottomVertices[i],
-      bottomVertices[next],
-      topVertices[next],
       topVertices[i],
+      topVertices[next],
+      bottomVertices[next],
     ]);
   }
   
   return mesh;
 }
 
-export function createSphere(radius = 0.5, segments = 16, rings = 12): Mesh {
+export function createSphere(radius = 0.5, segments = 24, rings = 16): Mesh {
   const mesh = new HalfEdgeMesh();
   
   const vertices: string[] = [];
@@ -120,7 +120,7 @@ export function createSphere(radius = 0.5, segments = 16, rings = 12): Mesh {
     }
   }
   
-  // Create faces
+  // Create faces with better topology
   for (let ring = 0; ring < rings; ring++) {
     for (let segment = 0; segment < segments; segment++) {
       const current = ring * segments + segment;
@@ -128,19 +128,15 @@ export function createSphere(radius = 0.5, segments = 16, rings = 12): Mesh {
       const below = (ring + 1) * segments + segment;
       const belowNext = (ring + 1) * segments + ((segment + 1) % segments);
       
-      if (ring < rings - 1) {
-        // Create quad face (except for poles)
-        if (ring > 0) {
-          mesh.addFace([vertices[current], vertices[next], vertices[belowNext], vertices[below]]);
-        } else {
-          // Top cap triangles
-          mesh.addFace([vertices[current], vertices[next], vertices[belowNext]]);
-        }
-      }
-      
-      if (ring === rings - 1) {
-        // Bottom cap triangles
+      if (ring === 0) {
+        // Top cap triangles - avoid degenerate quads at pole
+        mesh.addFace([vertices[current], vertices[next], vertices[belowNext]]);
+      } else if (ring === rings - 1) {
+        // Bottom cap triangles - avoid degenerate quads at pole
         mesh.addFace([vertices[current], vertices[below], vertices[next]]);
+      } else {
+        // Middle section quads
+        mesh.addFace([vertices[current], vertices[next], vertices[belowNext], vertices[below]]);
       }
     }
   }
@@ -148,12 +144,12 @@ export function createSphere(radius = 0.5, segments = 16, rings = 12): Mesh {
   return mesh;
 }
 
-export function createTorus(majorRadius = 0.5, minorRadius = 0.2, majorSegments = 16, minorSegments = 8): Mesh {
+export function createTorus(majorRadius = 0.5, minorRadius = 0.2, majorSegments = 24, minorSegments = 12): Mesh {
   const mesh = new HalfEdgeMesh();
   
   const vertices: string[][] = [];
   
-  // Create vertices for torus
+  // Create vertices for torus with improved parameterization
   for (let i = 0; i < majorSegments; i++) {
     vertices[i] = [];
     const u = (i / majorSegments) * Math.PI * 2;
@@ -170,7 +166,7 @@ export function createTorus(majorRadius = 0.5, minorRadius = 0.2, majorSegments 
     }
   }
   
-  // Create faces
+  // Create faces with consistent winding
   for (let i = 0; i < majorSegments; i++) {
     for (let j = 0; j < minorSegments; j++) {
       const nextI = (i + 1) % majorSegments;
@@ -178,9 +174,9 @@ export function createTorus(majorRadius = 0.5, minorRadius = 0.2, majorSegments 
       
       mesh.addFace([
         vertices[i][j],
-        vertices[nextI][j],
+        vertices[i][nextJ],
         vertices[nextI][nextJ],
-        vertices[i][nextJ]
+        vertices[nextI][j]
       ]);
     }
   }

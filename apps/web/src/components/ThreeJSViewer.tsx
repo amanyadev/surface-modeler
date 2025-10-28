@@ -51,7 +51,8 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
     toggleFaceSelection,
     executeCommand,
     gridSettings,
-    updateGridSettings
+    updateGridSettings,
+    lightingSettings
   } = useAppStore();
 
   // Initialize Three.js scene
@@ -67,7 +68,7 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
       antialias: true 
     });
     renderer.setSize(width, height);
-    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.enabled = lightingSettings.shadowsEnabled;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     rendererRef.current = renderer;
 
@@ -116,29 +117,39 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
     });
     */
 
-    // Add better lighting setup
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
-    scene.add(ambientLight);
+    // Store lighting references for dynamic updates
+    const lightingRefs = {
+      ambient: new THREE.AmbientLight(0x404040, lightingSettings.ambientIntensity),
+      directional: new THREE.DirectionalLight(0xffffff, lightingSettings.directionalIntensity),
+      fill: new THREE.DirectionalLight(0xffffff, lightingSettings.fillIntensity),
+      rim: new THREE.DirectionalLight(0x6699ff, lightingSettings.rimIntensity),
+    };
 
-    // Key light
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    directionalLight.position.set(10, 10, 5);
-    directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 2048;
-    directionalLight.shadow.mapSize.height = 2048;
-    directionalLight.shadow.camera.near = 0.5;
-    directionalLight.shadow.camera.far = 50;
-    scene.add(directionalLight);
+    // Ambient light
+    scene.add(lightingRefs.ambient);
+
+    // Key light (directional)
+    lightingRefs.directional.position.set(10, 10, 5);
+    lightingRefs.directional.castShadow = lightingSettings.shadowsEnabled;
+    lightingRefs.directional.shadow.mapSize.width = lightingSettings.shadowMapSize;
+    lightingRefs.directional.shadow.mapSize.height = lightingSettings.shadowMapSize;
+    lightingRefs.directional.shadow.camera.near = 0.5;
+    lightingRefs.directional.shadow.camera.far = 50;
+    lightingRefs.directional.visible = lightingSettings.directionalEnabled;
+    scene.add(lightingRefs.directional);
 
     // Fill light
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
-    fillLight.position.set(-5, 5, -5);
-    scene.add(fillLight);
+    lightingRefs.fill.position.set(-5, 5, -5);
+    lightingRefs.fill.visible = lightingSettings.fillEnabled;
+    scene.add(lightingRefs.fill);
 
     // Rim light
-    const rimLight = new THREE.DirectionalLight(0x4477ff, 0.2);
-    rimLight.position.set(-2, -2, 8);
-    scene.add(rimLight);
+    lightingRefs.rim.position.set(-2, -2, 8);
+    lightingRefs.rim.visible = lightingSettings.rimEnabled;
+    scene.add(lightingRefs.rim);
+
+    // Store references for later updates
+    (scene as any).lightingRefs = lightingRefs;
 
     // Setup raycaster for picking
     raycasterRef.current = new THREE.Raycaster();
@@ -162,6 +173,36 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
       renderer.dispose();
     };
   }, [width, height, cameraMode]);
+
+  // Update lighting when settings change
+  useEffect(() => {
+    if (!sceneRef.current || !rendererRef.current) return;
+    
+    const scene = sceneRef.current;
+    const renderer = rendererRef.current;
+    const lightingRefs = (scene as any).lightingRefs;
+    
+    if (lightingRefs) {
+      // Update lighting intensities
+      lightingRefs.ambient.intensity = lightingSettings.ambientIntensity;
+      lightingRefs.directional.intensity = lightingSettings.directionalIntensity;
+      lightingRefs.fill.intensity = lightingSettings.fillIntensity;
+      lightingRefs.rim.intensity = lightingSettings.rimIntensity;
+      
+      // Update lighting visibility
+      lightingRefs.directional.visible = lightingSettings.directionalEnabled;
+      lightingRefs.fill.visible = lightingSettings.fillEnabled;
+      lightingRefs.rim.visible = lightingSettings.rimEnabled;
+      
+      // Update shadow settings
+      lightingRefs.directional.castShadow = lightingSettings.shadowsEnabled;
+      lightingRefs.directional.shadow.mapSize.width = lightingSettings.shadowMapSize;
+      lightingRefs.directional.shadow.mapSize.height = lightingSettings.shadowMapSize;
+      
+      // Update renderer shadow settings
+      renderer.shadowMap.enabled = lightingSettings.shadowsEnabled;
+    }
+  }, [lightingSettings]);
 
   // Handle camera mode changes
   useEffect(() => {
@@ -570,6 +611,109 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
     };
   }, []);
 
+  // Create material based on shading mode and lighting settings
+  const createMaterial = (isSelected: boolean) => {
+    const baseColor = isSelected ? 0x3b82f6 : 0xe5e7eb;
+    const emissiveColor = isSelected ? 0x1e40af : 0x111827;
+    const emissiveIntensity = isSelected ? 0.3 : 0.1;
+
+    const materialProps = {
+      color: baseColor,
+      emissive: emissiveColor,
+      emissiveIntensity: emissiveIntensity,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+      wireframe: lightingSettings.wireframe,
+    };
+
+    switch (lightingSettings.shadingMode) {
+      case 'flat':
+        return new THREE.MeshLambertMaterial({
+          ...materialProps,
+          flatShading: true,
+        });
+        
+      case 'gouraud':
+        // Use Lambert material for Gouraud-like shading
+        return new THREE.MeshLambertMaterial({
+          ...materialProps,
+          flatShading: false,
+        });
+        
+      case 'phong':
+        // Enhanced Phong shading with better parameters
+        return new THREE.MeshPhongMaterial({
+          ...materialProps,
+          shininess: Math.max(1, (1.0 - lightingSettings.roughness) * 100),
+          specular: new THREE.Color().setHSL(0, 0, lightingSettings.metalness),
+        });
+        
+      case 'toon':
+        return new THREE.MeshToonMaterial({
+          ...materialProps,
+        });
+        
+      default:
+        return new THREE.MeshStandardMaterial({
+          ...materialProps,
+          roughness: lightingSettings.roughness,
+          metalness: lightingSettings.metalness,
+        });
+    }
+  };
+
+  // Create unified geometry for smooth shading
+  const createUnifiedMeshGeometry = (kernelMesh: HalfEdgeMesh): THREE.BufferGeometry => {
+    const geometry = new THREE.BufferGeometry();
+    const positions: number[] = [];
+    const indices: number[] = [];
+    
+    let vertexIndex = 0;
+    const vertexMap = new Map<string, number>();
+    
+    const faces = kernelMesh.faces();
+    
+    faces.forEach(face => {
+      const faceVertices = kernelMesh.getFaceVertices(face.id);
+      
+      if (faceVertices.length >= 3) {
+        const faceIndices: number[] = [];
+        
+        // Add vertices and build index mapping
+        faceVertices.forEach(vertex => {
+          const key = `${vertex.pos.x.toFixed(6)}_${vertex.pos.y.toFixed(6)}_${vertex.pos.z.toFixed(6)}`;
+          
+          if (!vertexMap.has(key)) {
+            positions.push(vertex.pos.x, vertex.pos.y, vertex.pos.z);
+            vertexMap.set(key, vertexIndex);
+            vertexIndex++;
+          }
+          
+          faceIndices.push(vertexMap.get(key)!);
+        });
+        
+        // Triangulate face
+        if (faceVertices.length === 4) {
+          // Quad: create two triangles
+          indices.push(faceIndices[0], faceIndices[1], faceIndices[2]);
+          indices.push(faceIndices[0], faceIndices[2], faceIndices[3]);
+        } else {
+          // Fan triangulation for other polygons
+          for (let i = 1; i < faceIndices.length - 1; i++) {
+            indices.push(faceIndices[0], faceIndices[i], faceIndices[i + 1]);
+          }
+        }
+      }
+    });
+    
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals(); // This creates smooth normals across the entire mesh
+    
+    return geometry;
+  };
+
   // Convert kernel mesh to Three.js geometry
   const meshToThreeJS = (kernelMesh: HalfEdgeMesh): THREE.Group => {
     const group = new THREE.Group();
@@ -579,9 +723,28 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
       return group;
     }
     
-    // Add faces
-    const faces = kernelMesh.faces();
-    faces.forEach((face, index) => {
+    // For smooth shading modes (phong, gouraud), create a unified mesh
+    if (lightingSettings.shadingMode === 'phong' || lightingSettings.shadingMode === 'gouraud') {
+      const unifiedGeometry = createUnifiedMeshGeometry(kernelMesh);
+      const material = createMaterial(false);
+      
+      const meshObject = new THREE.Mesh(unifiedGeometry, material);
+      meshObject.userData = { 
+        type: 'unified-mesh', 
+        meshId: kernelMesh.id || 'default-mesh'
+      };
+      meshObject.castShadow = true;
+      meshObject.receiveShadow = true;
+      meshObject.renderOrder = 1;
+      
+      // Store reference for potential selection
+      selectedObjectRef.current = meshObject;
+      
+      group.add(meshObject);
+    } else {
+      // For flat shading and toon shading, create individual face meshes
+      const faces = kernelMesh.faces();
+      faces.forEach((face, index) => {
       const faceVertices = kernelMesh.getFaceVertices(face.id);
       
       if (faceVertices.length >= 3) {
@@ -591,45 +754,55 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
         const positions: number[] = [];
         const normals: number[] = [];
         
-        // Simple fan triangulation for convex faces
-        for (let i = 1; i < faceVertices.length - 1; i++) {
-          // Triangle: 0, i, i+1
+        // Better triangulation for quads and other polygons
+        if (faceVertices.length === 4) {
+          // For quads, create two triangles that don't create visible diagonal
+          // Triangle 1: 0, 1, 2
           positions.push(
             faceVertices[0].pos.x, faceVertices[0].pos.y, faceVertices[0].pos.z,
-            faceVertices[i].pos.x, faceVertices[i].pos.y, faceVertices[i].pos.z,
-            faceVertices[i + 1].pos.x, faceVertices[i + 1].pos.y, faceVertices[i + 1].pos.z
+            faceVertices[1].pos.x, faceVertices[1].pos.y, faceVertices[1].pos.z,
+            faceVertices[2].pos.x, faceVertices[2].pos.y, faceVertices[2].pos.z
+          );
+          // Triangle 2: 0, 2, 3
+          positions.push(
+            faceVertices[0].pos.x, faceVertices[0].pos.y, faceVertices[0].pos.z,
+            faceVertices[2].pos.x, faceVertices[2].pos.y, faceVertices[2].pos.z,
+            faceVertices[3].pos.x, faceVertices[3].pos.y, faceVertices[3].pos.z
           );
           
-          // Use face normal for all vertices
+          // Add normals for both triangles
           const normal = face.normal || { x: 0, y: 1, z: 0 };
-          for (let j = 0; j < 3; j++) {
+          for (let j = 0; j < 6; j++) { // 6 vertices total (2 triangles × 3 vertices)
             normals.push(normal.x, normal.y, normal.z);
+          }
+        } else {
+          // Fan triangulation for other polygons
+          for (let i = 1; i < faceVertices.length - 1; i++) {
+            // Triangle: 0, i, i+1
+            positions.push(
+              faceVertices[0].pos.x, faceVertices[0].pos.y, faceVertices[0].pos.z,
+              faceVertices[i].pos.x, faceVertices[i].pos.y, faceVertices[i].pos.z,
+              faceVertices[i + 1].pos.x, faceVertices[i + 1].pos.y, faceVertices[i + 1].pos.z
+            );
+            
+            // Use face normal for all vertices
+            const normal = face.normal || { x: 0, y: 1, z: 0 };
+            for (let j = 0; j < 3; j++) {
+              normals.push(normal.x, normal.y, normal.z);
+            }
           }
         }
         
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
         geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
         
-        const isSelected = selectedFaceId === face.id || selectedFaceIds.includes(face.id);
-        
-        // Enhanced materials with better selection feedback
-        let baseColor = 0xb0b8c4; // Slightly lighter gray for better visibility
-        let opacity = 0.85;
-        let emissive = 0x000000;
-        
-        if (isSelected) {
-          baseColor = 0x3b82f6; // Bright blue for selection (more professional than red)
-          opacity = 1.0;
-          emissive = 0x1e40af; // Slight blue glow
+        // For better Phong shading, ensure smooth normals when not in flat mode
+        if (lightingSettings.shadingMode !== 'flat') {
+          geometry.computeVertexNormals();
         }
         
-        const material = new THREE.MeshLambertMaterial({
-          color: baseColor,
-          emissive: emissive,
-          side: THREE.DoubleSide,
-          transparent: opacity < 1,
-          opacity: opacity,
-        });
+        const isSelected = selectedFaceId === face.id || selectedFaceIds.includes(face.id);
+        const material = createMaterial(isSelected);
         
         const faceMesh = new THREE.Mesh(geometry, material);
         faceMesh.userData = { 
@@ -640,15 +813,19 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
         };
         faceMesh.castShadow = true;
         faceMesh.receiveShadow = true;
+        faceMesh.renderOrder = 1; // Render faces before edges
         
         // Add wireframe edges for better visibility
         const wireframeGeometry = new THREE.WireframeGeometry(geometry);
         const wireframeMaterial = new THREE.LineBasicMaterial({
-          color: isSelected ? 0xffffff : 0x374151,
+          color: isSelected ? 0xffffff : 0x6b7280, // Lighter wireframe color
           linewidth: isSelected ? 2 : 1,
+          transparent: true,
+          opacity: isSelected ? 1.0 : 0.8,
         });
         const wireframe = new THREE.LineSegments(wireframeGeometry, wireframeMaterial);
         wireframe.userData = faceMesh.userData; // Same user data for selection
+        wireframe.renderOrder = 3; // Render wireframes on top
         
         // Store reference if selected or if in mesh mode and mesh is selected
         if (isSelected || (selectionMode === 'mesh' && selectedMeshId)) {
@@ -658,7 +835,8 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
         group.add(faceMesh);
         group.add(wireframe);
       }
-    });
+      });
+    }
 
     // Add vertices
     const vertices = kernelMesh.vertices();
@@ -759,61 +937,87 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
         // Create edge visualization based on selection state
         const shouldShowEdges = selectionMode === 'edge';
         
-        if (isSelected && shouldShowEdges) {
-          // Create thick edge for selected
-          const tubeGeometry = new THREE.TubeGeometry(
-            new THREE.LineCurve3(
-              new THREE.Vector3(sourceVertex.pos.x, sourceVertex.pos.y, sourceVertex.pos.z),
-              new THREE.Vector3(targetVertex.pos.x, targetVertex.pos.y, targetVertex.pos.z)
-            ),
-            1,
-            0.02,
-            8,
-            false
-          );
-          const material = new THREE.MeshStandardMaterial({
-            color: 0x10b981, // Emerald green for selected edges
-            emissive: 0x065f46,
-            emissiveIntensity: 0.2,
-            roughness: 0.2,
-            metalness: 0.1,
-          });
-          const edgeMesh = new THREE.Mesh(tubeGeometry, material);
-          edgeMesh.userData = { type: 'edge', edgeId: edge.id, edgeIndex: index };
-          edgeMesh.castShadow = true;
-          edgeMesh.visible = true;
-          
-          // Store reference if selected
-          selectedObjectRef.current = edgeMesh;
-          group.add(edgeMesh);
+        if (shouldShowEdges) {
+          // Only create visible edges when in edge mode
+          if (isSelected) {
+            // Create thick edge for selected
+            const tubeGeometry = new THREE.TubeGeometry(
+              new THREE.LineCurve3(
+                new THREE.Vector3(sourceVertex.pos.x, sourceVertex.pos.y, sourceVertex.pos.z),
+                new THREE.Vector3(targetVertex.pos.x, targetVertex.pos.y, targetVertex.pos.z)
+              ),
+              1,
+              0.02,
+              8,
+              false
+            );
+            const material = new THREE.MeshStandardMaterial({
+              color: 0x10b981, // Emerald green for selected edges
+              emissive: 0x065f46,
+              emissiveIntensity: 0.2,
+              roughness: 0.2,
+              metalness: 0.1,
+            });
+            const edgeMesh = new THREE.Mesh(tubeGeometry, material);
+            edgeMesh.userData = { type: 'edge', edgeId: edge.id, edgeIndex: index };
+            edgeMesh.castShadow = true;
+            edgeMesh.renderOrder = 2; // Render after faces
+            
+            // Store reference if selected
+            selectedObjectRef.current = edgeMesh;
+            group.add(edgeMesh);
+          } else {
+            // Create subtle edge visualization for non-selected edges
+            const tubeGeometry = new THREE.TubeGeometry(
+              new THREE.LineCurve3(
+                new THREE.Vector3(sourceVertex.pos.x, sourceVertex.pos.y, sourceVertex.pos.z),
+                new THREE.Vector3(targetVertex.pos.x, targetVertex.pos.y, targetVertex.pos.z)
+              ),
+              1,
+              0.015, // Thinner for non-selected
+              8,
+              false
+            );
+            
+            const material = new THREE.MeshStandardMaterial({
+              color: 0x64748b, // Slate gray
+              transparent: true,
+              opacity: 0.6,
+              roughness: 0.8,
+              metalness: 0.0,
+            });
+            
+            const edgeMesh = new THREE.Mesh(tubeGeometry, material);
+            edgeMesh.userData = { type: 'edge', edgeId: edge.id, edgeIndex: index };
+            edgeMesh.renderOrder = 2; // Render after faces
+            
+            group.add(edgeMesh);
+          }
         } else {
-          // Always create edge geometry for selection, but make it invisible in non-edge modes
-          // Use tube geometry for better selection accuracy
+          // When not in edge mode, create invisible selection geometry only
           const tubeGeometry = new THREE.TubeGeometry(
             new THREE.LineCurve3(
               new THREE.Vector3(sourceVertex.pos.x, sourceVertex.pos.y, sourceVertex.pos.z),
               new THREE.Vector3(targetVertex.pos.x, targetVertex.pos.y, targetVertex.pos.z)
             ),
             1,
-            0.04, // Thicker tube for easier selection
+            0.04, // Thicker for easier selection
             8,
             false
           );
           
           const material = new THREE.MeshStandardMaterial({
-            color: shouldShowEdges ? 0x64748b : 0x64748b, // Slate gray
+            color: 0x64748b,
             transparent: true,
-            opacity: shouldShowEdges ? 0.8 : 0.0, // Invisible when not in edge mode, but still selectable
+            opacity: 0.0, // Completely invisible
             roughness: 0.8,
             metalness: 0.0,
           });
           
           const edgeMesh = new THREE.Mesh(tubeGeometry, material);
           edgeMesh.userData = { type: 'edge', edgeId: edge.id, edgeIndex: index };
-          edgeMesh.visible = true; // Always visible for selection
-          
-          // Add hover detection
-          edgeMesh.userData.originalMaterial = material;
+          edgeMesh.visible = true; // Visible for raycasting but transparent
+          edgeMesh.renderOrder = 2; // Render after faces
           
           group.add(edgeMesh);
         }
@@ -833,7 +1037,7 @@ export const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ width, height }) =
     // Add new mesh
     const threeJSMesh = meshToThreeJS(mesh);
     meshObjectRef.current.add(threeJSMesh);
-  }, [mesh, selectedFaceId, selectedFaceIds, selectedVertexId, selectedEdgeId, selectedMeshId, selectionMode, drawMode, sketchVertices, updateCounter]);
+  }, [mesh, selectedFaceId, selectedFaceIds, selectedVertexId, selectedEdgeId, selectedMeshId, selectionMode, drawMode, sketchVertices, updateCounter, lightingSettings]);
 
   // Track if we're dragging camera to prevent selection on release
   const isDraggingCameraRef = useRef(false);

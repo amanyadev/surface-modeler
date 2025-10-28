@@ -17,6 +17,23 @@ export interface GridSettings {
   visible: boolean;
 }
 
+export interface LightingSettings {
+  shadingMode: 'phong' | 'gouraud' | 'flat' | 'toon';
+  roughness: number;
+  metalness: number;
+  wireframe: boolean;
+  ambientIntensity: number;
+  directionalIntensity: number;
+  directionalEnabled: boolean;
+  fillIntensity: number;
+  fillEnabled: boolean;
+  rimIntensity: number;
+  rimEnabled: boolean;
+  shadowsEnabled: boolean;
+  shadowIntensity: number;
+  shadowMapSize: number;
+}
+
 interface AppState {
   mesh: HalfEdgeMesh | null;
   commandHistory: CommandHistory;
@@ -33,6 +50,7 @@ interface AppState {
   cameraMode: CameraMode;
   updateCounter: number;
   gridSettings: GridSettings;
+  lightingSettings: LightingSettings;
   
   // Actions
   setMesh: (mesh: HalfEdgeMesh) => void;
@@ -55,6 +73,7 @@ interface AppState {
   undo: () => void;
   redo: () => void;
   updateGridSettings: (settings: Partial<GridSettings>) => void;
+  updateLightingSettings: (settings: Partial<LightingSettings>) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -80,6 +99,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     adaptive: true,
     opacity: 0.7,
     visible: true
+  },
+  lightingSettings: {
+    shadingMode: 'phong',
+    roughness: 0.3,
+    metalness: 0.1,
+    wireframe: false,
+    ambientIntensity: 0.6,
+    directionalIntensity: 1.2,
+    directionalEnabled: true,
+    fillIntensity: 0.5,
+    fillEnabled: true,
+    rimIntensity: 0.3,
+    rimEnabled: true,
+    shadowsEnabled: true,
+    shadowIntensity: 0.8,
+    shadowMapSize: 2048
   },
   
   setMesh: (mesh) => set({ mesh }),
@@ -195,6 +230,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   updateGridSettings: (settings) => {
     set(state => ({
       gridSettings: { ...state.gridSettings, ...settings }
+    }));
+  },
+  
+  updateLightingSettings: (settings) => {
+    set(state => ({
+      lightingSettings: { ...state.lightingSettings, ...settings }
     }));
   },
 }));

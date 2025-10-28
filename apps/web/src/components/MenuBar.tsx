@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../store';
+import { usePanelManagerContext } from '../App';
 import {
   createPlane,
   createCube,
@@ -10,6 +11,14 @@ import {
 export const MenuBar: React.FC = () => {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const { setMesh, undo, redo, commandHistory, clearSketch } = useAppStore();
+  const { showPanel, hidePanel, togglePanel, isPanelVisible, panels } = usePanelManagerContext();
+
+  // Categorize panels
+  const categorizedPanels = {
+    modeling: panels.filter(p => ['primitives', 'drawing', 'modeling'].includes(p.id)),
+    selection: panels.filter(p => ['selection', 'properties', 'hierarchy'].includes(p.id)),
+    view: panels.filter(p => ['inspector', 'lighting'].includes(p.id))
+  };
 
   const menus = [
     {
@@ -56,6 +65,35 @@ export const MenuBar: React.FC = () => {
         { label: 'Reset View', action: () => window.dispatchEvent(new CustomEvent('resetCamera')), shortcut: 'R' },
         { label: 'Fit All', action: () => window.dispatchEvent(new CustomEvent('fitCamera')), shortcut: 'F' },
         { label: 'Toggle Wireframe', action: () => window.dispatchEvent(new CustomEvent('toggleWireframe')), shortcut: 'W' },
+      ]
+    },
+    {
+      label: 'Panels',
+      items: [
+        { label: 'Modeling', disabled: true },
+        ...categorizedPanels.modeling.map(panel => ({
+          label: `${isPanelVisible(panel.id) ? '✓' : ''} ${panel.title}`,
+          action: () => togglePanel(panel.id),
+        })),
+        { label: '-' },
+        { label: 'Selection', disabled: true },
+        ...categorizedPanels.selection.map(panel => ({
+          label: `${isPanelVisible(panel.id) ? '✓' : ''} ${panel.title}`,
+          action: () => togglePanel(panel.id),
+        })),
+        { label: '-' },
+        { label: 'View', disabled: true },
+        ...categorizedPanels.view.map(panel => ({
+          label: `${isPanelVisible(panel.id) ? '✓' : ''} ${panel.title}`,
+          action: () => togglePanel(panel.id),
+        })),
+        { label: '-' },
+        { label: 'Show All Panels', action: () => {
+          panels.forEach(panel => showPanel(panel.id));
+        }},
+        { label: 'Hide All Panels', action: () => {
+          panels.forEach(panel => hidePanel(panel.id));
+        }},
       ]
     },
     {
@@ -110,19 +148,23 @@ export const MenuBar: React.FC = () => {
               {/* Dropdown menu */}
               <div className="absolute left-0 top-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl py-1 min-w-48 z-20">
                 {menu.items.map((item, index) => (
-                  <button
-                    key={index}
-                    onClick={() => handleItemClick(item.action)}
-                    disabled={'disabled' in item ? item.disabled : false}
-                    className={`w-full px-3 py-1.5 text-left text-sm flex items-center justify-between hover:bg-gray-700 transition-colors ${
-                      ('disabled' in item && item.disabled) ? 'text-gray-500 cursor-not-allowed' : 'text-gray-300 hover:text-white'
-                    }`}
-                  >
-                    <span>{item.label}</span>
-                    {item.shortcut && (
-                      <span className="text-xs text-gray-500 ml-4">{item.shortcut}</span>
-                    )}
-                  </button>
+                  item.label === '-' ? (
+                    <div key={index} className="mx-2 my-1 border-t border-gray-600" />
+                  ) : (
+                    <button
+                      key={index}
+                      onClick={() => 'action' in item && item.action ? handleItemClick(item.action) : undefined}
+                      disabled={'disabled' in item ? item.disabled : false}
+                      className={`w-full px-3 py-1.5 text-left text-sm flex items-center justify-between hover:bg-gray-700 transition-colors ${
+                        ('disabled' in item && item.disabled) ? 'text-gray-500 cursor-not-allowed' : 'text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      <span>{item.label}</span>
+                      {'shortcut' in item && item.shortcut && (
+                        <span className="text-xs text-gray-500 ml-4">{item.shortcut}</span>
+                      )}
+                    </button>
+                  )
                 ))}
               </div>
             </>
