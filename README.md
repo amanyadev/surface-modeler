@@ -1,16 +1,49 @@
 # Half-Edge Surface Modeler
 
-A modern 3D surface modeling web application built with TypeScript, featuring a separated kernel architecture for high-performance mesh operations.
+A modern 3D surface modeling web application built with TypeScript, featuring a separated kernel architecture for high-performance mesh operations. Built with Unity ProBuilder-inspired interface and professional 3D modeling tools.
 
 ## Features
 
+### Core Architecture
 - **Separated Kernel Architecture**: Pure TypeScript geometry kernel independent of UI
 - **Half-Edge Mesh Data Structure**: Robust mesh representation supporting complex operations
 - **Command Pattern**: Full undo/redo support for all modeling operations
-- **2D/3D Views**: Toggle between perspective and orthographic views
 - **Modern Stack**: React + Three.js + Tailwind CSS + Zustand
-- **Real-time Visualization**: Interactive 3D viewport with face selection
 - **Extensible Design**: Easy to add new modeling operations and file importers
+
+### Selection & Interaction
+- **Vertex, Edge, Face Selection**: Unity ProBuilder-style gizmos with hover and selection states
+- **Vertex, Edge, Face Movement**: Interactive dragging with screen-space scaled gizmos
+- **Professional Gizmos**: Fixed-size selection indicators that don't scale with camera zoom
+- **Multi-mode Selection**: Switch between vertex, edge, face, and mesh selection modes
+
+### Visualization & Rendering
+- **Real-time 3D Viewport**: Interactive Three.js-powered 3D scene
+- **Camera Controls**: Smooth zoom, pan, and rotate with mouse/trackpad
+- **Lighting & Shading**: Multiple lighting presets and shading modes
+- **2D/3D Views**: Toggle between perspective and orthographic projections
+- **Material System**: PBR materials with customizable properties
+
+### Inspector & UI
+- **Inspector Panel**: View and edit mesh properties, selection info, and object hierarchy
+- **Property Editing**: Real-time modification of vertex positions, face normals, and material properties
+- **Selection Statistics**: Display counts and details of selected elements
+- **Responsive Interface**: Clean, professional UI that scales across devices
+
+### File Import/Export
+- **OBJ Import**: Load .obj files with full geometry conversion to half-edge structure
+- **Multiple Format Support**: GLTF, GLB format support for modern 3D workflows
+- **Robust Conversion**: Safe mesh conversion with validation and error handling
+- **File Menu Integration**: Seamless import/export through standard menu interface
+
+### Reference Videos
+See the `readme/` folder for demonstration videos:
+- `vertex-edge-face-movement.gif` - Interactive gizmo manipulation (3.2 MB)
+- `face-selection.gif` - Face selection and highlighting (602 KB)
+- `obj-import.gif` - File import workflow (851 KB)
+- `inspector-view.gif` - Inspector panel features (639 KB)
+- `lighting-presets.gif` - Lighting and material controls (2.3 MB)
+- `shading-lighting.gif` - Shading mode switching (621 KB)
 
 ## Quick Start
 
@@ -65,10 +98,15 @@ Navigate to `http://localhost:3001` to see the application (port may vary if 300
 ### Basic Operations
 
 1. **Create Primitives**: Use the toolbar to create planes, cubes, or cylinders
-2. **Select Faces**: Click on faces in the 3D viewport to select them
-3. **Extrude**: Press `E` or use the toolbar button to extrude selected faces
-4. **Flip Normals**: Use the flip normals button to reverse face orientation
-5. **Undo/Redo**: Press `Ctrl+Z`/`Ctrl+Shift+Z` or use toolbar buttons
+2. **Selection Modes**: Switch between vertex, edge, face, and mesh selection modes
+3. **Interactive Selection**: Click vertices, edges, or faces to select them (highlighted with gizmos)
+4. **Gizmo Manipulation**: Drag the Unity ProBuilder-style gizmos to move selected elements
+5. **File Import**: Use File → Import to load OBJ, GLTF, or GLB files
+6. **Inspector View**: Monitor selection details and edit properties in the inspector panel
+7. **Lighting Control**: Adjust lighting presets and shading modes for optimal visualization
+8. **Extrude**: Press `E` or use the toolbar button to extrude selected faces
+9. **Flip Normals**: Use the flip normals button to reverse face orientation
+10. **Undo/Redo**: Press `Ctrl+Z`/`Ctrl+Shift+Z` or use toolbar buttons
 
 ### Hotkeys
 
@@ -76,12 +114,18 @@ Navigate to `http://localhost:3001` to see the application (port may vary if 300
 - `Space` - Toggle 2D/3D view
 - `Ctrl+Z` - Undo
 - `Ctrl+Shift+Z` - Redo
+- `1` - Vertex selection mode
+- `2` - Edge selection mode  
+- `3` - Face selection mode
+- `4` - Mesh selection mode
 
 ### View Controls
 
-- Toggle between 2D orthographic and 3D perspective views
-- Click faces to select them (highlighted in red)
-- View current selection info in the toolbar
+- **Camera Movement**: Mouse drag to rotate, scroll to zoom, middle-click to pan
+- **Selection Modes**: Click to select elements, drag gizmos to move them
+- **View Modes**: Toggle between 2D orthographic and 3D perspective views
+- **Visual Feedback**: Selected elements are highlighted with professional gizmos
+- **Inspector Integration**: View selection details and properties in real-time
 
 ## Architecture
 
@@ -172,7 +216,7 @@ The architecture supports several planned extensions:
 
 - **WebWorker Support**: Move heavy mesh operations to background threads
 - **WASM Integration**: Compile performance-critical operations to WebAssembly
-- **File Format Support**: Import/export OBJ, FBX, GLTF, and other formats
+- **File Format Support**: Import/export OBJ, GLTF, GLB and other 3D formats ✅
 - **Advanced Operations**: Boolean operations, subdivision surfaces, sculpting tools
 - **Collaboration**: Multi-user editing with operational transforms
 

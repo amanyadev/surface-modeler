@@ -1,10 +1,20 @@
 # @amanyadev/half-edge
 
-A pure TypeScript geometry and modeling kernel for 3D surface modeling applications.
+A pure TypeScript geometry and modeling kernel for 3D surface modeling applications. Provides robust half-edge mesh data structure with comprehensive modeling operations, selection tools, and file format support.
 
 ## Overview
 
 The kernel provides a complete mesh data structure and modeling operations using the half-edge representation. It's designed to be platform-agnostic and can run in browsers, Node.js, or WebWorkers.
+
+### Key Features
+
+- **Half-Edge Mesh Structure**: Efficient mesh representation supporting complex topology operations
+- **Selection System**: Vertex, edge, and face selection with robust connectivity tracking
+- **Movement Operations**: Safe vertex, edge, and face transformation with topology preservation
+- **Command Pattern**: Full undo/redo support for all modeling operations
+- **File Format Support**: Seamless conversion to/from standard 3D file formats
+- **Type Safety**: Complete TypeScript coverage with strict typing
+- **Platform Agnostic**: No DOM dependencies, works in any JavaScript environment
 
 ## Installation
 
@@ -170,6 +180,27 @@ Reverses the orientation of a face:
 const cmd = new FlipNormalsCommand(faceId);
 ```
 
+#### MoveVertexCommand
+Moves a vertex to a new position:
+
+```typescript
+const cmd = new MoveVertexCommand(vertexId, newPosition);
+```
+
+#### SplitEdgeCommand
+Splits an edge by inserting a new vertex:
+
+```typescript
+const cmd = new SplitEdgeCommand(edgeId, position);
+```
+
+#### DeleteElementCommand
+Safely deletes vertices, edges, or faces:
+
+```typescript
+const cmd = new DeleteElementCommand(elementId, elementType);
+```
+
 ### Custom Commands
 
 Implement your own modeling operations:
@@ -268,16 +299,56 @@ function getVertexFaces(mesh: HalfEdgeMesh, vertexId: string): Face[] {
 - Command history stores full mesh snapshots (consider checkpointing for large operations)
 - Half-edge traversal is O(1) for most operations
 
+### Selection & Transformation APIs
+
+The kernel provides comprehensive selection and transformation capabilities:
+
+```typescript
+// Selection management
+const mesh = new HalfEdgeMesh();
+
+// Select elements
+mesh.selectVertex(vertexId);
+mesh.selectEdge(edgeId);
+mesh.selectFace(faceId);
+
+// Get selection state
+const selectedVertices = mesh.getSelectedVertices();
+const selectedEdges = mesh.getSelectedEdges();  
+const selectedFaces = mesh.getSelectedFaces();
+
+// Transform selected elements
+const moveCmd = new MoveVerticesCommand(selectedVertices, offset);
+history.execute(moveCmd, mesh);
+```
+
+### File Format Integration
+
+Seamless conversion between kernel mesh format and standard 3D file formats:
+
+```typescript
+import { bufferGeometryToHalfEdge, halfEdgeToBufferGeometry } from '@half-edge/kernel';
+
+// Convert from Three.js BufferGeometry
+const bufferGeom = loadedMesh.geometry;
+const halfEdgeMesh = bufferGeometryToHalfEdge(bufferGeom);
+
+// Convert to Three.js BufferGeometry for rendering
+const outputGeometry = halfEdgeToBufferGeometry(halfEdgeMesh);
+```
+
 ## Future Extensions
 
 Planned additions to the kernel:
 
-- **Boolean Operations**: Union, intersection, difference
+- **Boolean Operations**: Union, intersection, difference ✅ (Basic support)
 - **Subdivision Surfaces**: Catmull-Clark and Loop subdivision
 - **Spatial Indexing**: Octree and BVH for large meshes
-- **Mesh Validation**: Topology checking and repair
+- **Mesh Validation**: Topology checking and repair ✅ (Basic validation)
 - **Advanced Primitives**: Torus, icosphere, etc.
 - **Mesh Simplification**: LOD generation and decimation
+- **Edge Operations**: Advanced edge splitting and merging ✅ (Basic support)
+- **File Format Support**: Extended format support beyond OBJ/GLTF ✅ (OBJ, GLTF, GLB)
 
 ## Testing
 
