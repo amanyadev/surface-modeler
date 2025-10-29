@@ -2,6 +2,26 @@
 
 A modern 3D surface modeling web application built with TypeScript, featuring a separated kernel architecture for high-performance mesh operations. Built with Unity ProBuilder-inspired interface and professional 3D modeling tools.
 
+## Demo
+
+### Interactive Gizmo Manipulation
+![Vertex, Edge, Face Movement](readme/vertex-edge-face-movement.gif)
+
+### Face Selection
+![Face Selection and Highlighting](readme/face-selection.gif)
+
+### OBJ File Import
+![File Import Workflow](readme/obj-import.gif)
+
+### Inspector Panel
+![Inspector Panel Features](readme/inspector-view.gif)
+
+### Lighting Presets
+![Lighting and Material Controls](readme/lighting-presets.gif)
+
+### Shading Modes
+![Shading Mode Switching](readme/shading-lighting.gif)
+
 ## Features
 
 ### Core Architecture
@@ -35,15 +55,6 @@ A modern 3D surface modeling web application built with TypeScript, featuring a 
 - **Multiple Format Support**: GLTF, GLB format support for modern 3D workflows
 - **Robust Conversion**: Safe mesh conversion with validation and error handling
 - **File Menu Integration**: Seamless import/export through standard menu interface
-
-### Reference Videos
-See the `readme/` folder for demonstration videos:
-- `vertex-edge-face-movement.gif` - Interactive gizmo manipulation (3.2 MB)
-- `face-selection.gif` - Face selection and highlighting (602 KB)
-- `obj-import.gif` - File import workflow (851 KB)
-- `inspector-view.gif` - Inspector panel features (639 KB)
-- `lighting-presets.gif` - Lighting and material controls (2.3 MB)
-- `shading-lighting.gif` - Shading mode switching (621 KB)
 
 ## Quick Start
 
